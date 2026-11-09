@@ -1,0 +1,6 @@
+PraxiOJ
+AI-Assisted Online Judge Framework
+Copyright 2026 DoHyun Choi
+
+Contributors retain copyright in their respective contributions.
+Third-party components retain their own copyright notices and licenses.

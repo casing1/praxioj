@@ -1,0 +1,93 @@
+{
+  "schema_version": "1.1",
+  "id": "workspace-plan",
+  "version": "1.0.0",
+  "title": "Build a release plan in your AI workspace",
+  "description": "Use the internal AI conversation and permitted workspace file tools to prepare a small release plan. Ask the mock assistant to \"save a release plan\" to demonstrate its deterministic tool cycle, or use an operator-configured compatible provider. Review the resulting plan.txt, load it into your submission draft, and submit your own final answer. File operations affect this session's logical database workspace only.",
+  "category": "AI Workspace demo",
+  "difficulty": "introductory",
+  "initial_resources": [
+    {
+      "name": "project-brief.txt",
+      "media_type": "text/plain",
+      "content": "A small team is preparing its first open-source release. The demo needs a reproducible setup, a working test suite, and documented limitations. Draft a concise release-readiness plan in English."
+    }
+  ],
+  "allowed_ai_capabilities": [
+    "chat",
+    "tool_calling"
+  ],
+  "allowed_tools": [
+    "workspace.read_file",
+    "workspace.write_file"
+  ],
+  "resource_limits": {
+    "max_messages": 20,
+    "max_message_chars": 4000,
+    "max_submission_chars": 20000,
+    "max_model_calls": 30,
+    "max_tool_calls": 20,
+    "max_total_tokens": null,
+    "request_timeout_seconds": 30,
+    "max_run_seconds": 90,
+    "max_file_bytes": 16384,
+    "max_workspace_bytes": 65536,
+    "max_workspace_files": 8
+  },
+  "submission": {
+    "kind": "text",
+    "instructions": "Submit a short plan in English with Goal, Verification, and Risk sections. State the release goal, how you will verify it, and a risk with a mitigation. This demonstration rubric awards points for the named sections only."
+  },
+  "evaluation": {
+    "evaluator_id": "builtin.text-rubric",
+    "evaluator_version": "1.0.0",
+    "criteria": [
+      {
+        "id": "goal",
+        "title": "Release goal",
+        "description": "Include a Goal section that states what the release should achieve.",
+        "max_score": 30,
+        "config": {
+          "required_terms": [
+            "goal"
+          ]
+        }
+      },
+      {
+        "id": "verification",
+        "title": "Verification plan",
+        "description": "Include a Verification section that describes how to check the result.",
+        "max_score": 40,
+        "config": {
+          "required_terms": [
+            "verification"
+          ]
+        }
+      },
+      {
+        "id": "risk",
+        "title": "Risk and mitigation",
+        "description": "Include a Risk section identifying a possible failure and a mitigation.",
+        "max_score": 30,
+        "config": {
+          "required_terms": [
+            "risk"
+          ]
+        }
+      }
+    ]
+  },
+  "tool_permissions": [
+    "workspace:read",
+    "workspace:write"
+  ],
+  "ai_policy": {
+    "allowed_providers": [
+      "mock",
+      "compatible"
+    ],
+    "allowed_models": [],
+    "max_output_tokens": 1024,
+    "allow_temperature": true
+  }
+}

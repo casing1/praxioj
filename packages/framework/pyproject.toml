@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools==82.0.1"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "praxioj-framework"
+version = "0.1.0"
+description = "An open-source framework for evaluating human–AI collaboration."
+authors = [{name = "DoHyun Choi"}]
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+requires-python = ">=3.13"
+dependencies = ["pydantic==2.14.3", "httpx==0.28.1"]
+
+[tool.setuptools.packages.find]
+where = ["src"]

@@ -1,0 +1,7 @@
+# Optional override for a native Python API connecting to the Compose database.
+# docker compose -f compose.yaml -f compose.native.yaml up -d db
+services:
+  db:
+    networks: [backend, local]
+    ports:
+      - '127.0.0.1:5432:5432'

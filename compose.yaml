@@ -1,0 +1,73 @@
+name: praxioj
+services:
+  db:
+    image: postgres:18.6-bookworm
+    environment:
+      POSTGRES_DB: praxioj
+      POSTGRES_USER: praxioj
+      POSTGRES_PASSWORD: praxioj
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U praxioj -d praxioj']
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    networks: [backend]
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    environment:
+      DATABASE_URL: postgresql+psycopg://praxioj:praxioj@db:5432/praxioj
+      PRAXIOJ_ENV: development
+      PRAXIOJ_DEFAULT_PROFILE: ${PRAXIOJ_DEFAULT_PROFILE:-mock}
+      PRAXIOJ_LLM_BASE_URL: ${PRAXIOJ_LLM_BASE_URL:-}
+      PRAXIOJ_LLM_MODEL: ${PRAXIOJ_LLM_MODEL:-}
+      PRAXIOJ_LLM_API_KEY: ${PRAXIOJ_LLM_API_KEY:-}
+      PRAXIOJ_LLM_SUPPORTS_TOOLS: ${PRAXIOJ_LLM_SUPPORTS_TOOLS:-false}
+      PRAXIOJ_LLM_SUPPORTS_SYSTEM: ${PRAXIOJ_LLM_SUPPORTS_SYSTEM:-true}
+      PRAXIOJ_LLM_SUPPORTS_TEMPERATURE: ${PRAXIOJ_LLM_SUPPORTS_TEMPERATURE:-true}
+      PRAXIOJ_LLM_TOKEN_PARAMETER: ${PRAXIOJ_LLM_TOKEN_PARAMETER:-max_tokens}
+      PRAXIOJ_LLM_TIMEOUT_SECONDS: ${PRAXIOJ_LLM_TIMEOUT_SECONDS:-30}
+      PRAXIOJ_PRICE_INPUT_PER_MILLION: ${PRAXIOJ_PRICE_INPUT_PER_MILLION:-}
+      PRAXIOJ_PRICE_OUTPUT_PER_MILLION: ${PRAXIOJ_PRICE_OUTPUT_PER_MILLION:-}
+      PRAXIOJ_PRICE_CURRENCY: ${PRAXIOJ_PRICE_CURRENCY:-USD}
+    ports:
+      - '127.0.0.1:8000:8000'
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 15s
+    networks: [backend, local]
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    ports:
+      - '127.0.0.1:5173:80'
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, wget, -q, --spider, http://127.0.0.1/]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks: [local]
+
+volumes:
+  postgres_data:
+
+networks:
+  backend:
+    internal: true
+  local:
+    driver: bridge

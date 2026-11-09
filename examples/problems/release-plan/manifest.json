@@ -1,0 +1,54 @@
+{
+  "schema_version": "1.0",
+  "id": "release-plan",
+  "version": "1.0.0",
+  "title": "Plan a reliable release",
+  "description": "Use the internal AI workspace to draft a short release-readiness plan for a small open-source project. Explain your goal, a verification step, and a risk with a mitigation. The mock assistant offers predefined guidance; you remain responsible for the final submission. This sample demonstrates the framework and does not measure real-world collaboration skill.",
+  "category": "Foundation demo",
+  "difficulty": "introductory",
+  "initial_resources": [
+    {
+      "name": "project-brief.txt",
+      "media_type": "text/plain",
+      "content": "A small team is preparing its first open-source release. The demo needs a reproducible setup, a working test suite, and documented limitations. Draft a concise release-readiness plan in English."
+    }
+  ],
+  "allowed_ai_capabilities": ["chat"],
+  "allowed_tools": [],
+  "resource_limits": {
+    "max_messages": 20,
+    "max_message_chars": 4000,
+    "max_submission_chars": 20000
+  },
+  "submission": {
+    "kind": "text",
+    "instructions": "Submit a short plan in English with Goal, Verification, and Risk sections. State the release goal, how you will verify it, and a risk with a mitigation. This demonstration rubric awards points for the named sections only."
+  },
+  "evaluation": {
+    "evaluator_id": "builtin.text-rubric",
+    "evaluator_version": "1.0.0",
+    "criteria": [
+      {
+        "id": "goal",
+        "title": "Release goal",
+        "description": "Include a Goal section that states what the release should achieve.",
+        "max_score": 30,
+        "config": {"required_terms": ["goal"]}
+      },
+      {
+        "id": "verification",
+        "title": "Verification plan",
+        "description": "Include a Verification section that describes how to check the result.",
+        "max_score": 40,
+        "config": {"required_terms": ["verification"]}
+      },
+      {
+        "id": "risk",
+        "title": "Risk and mitigation",
+        "description": "Include a Risk section identifying a possible failure and a mitigation.",
+        "max_score": 30,
+        "config": {"required_terms": ["risk"]}
+      }
+    ]
+  }
+}

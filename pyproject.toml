@@ -1,0 +1,11 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+markers = [
+    "postgres: requires TEST_DATABASE_URL pointing at a disposable PostgreSQL database",
+    "live_provider: explicit opt-in external provider integration; skipped without dedicated credentials",
+]
+
+[tool.ruff]
+target-version = "py313"
+line-length = 120
