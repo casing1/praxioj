@@ -166,3 +166,22 @@ The M1–M3 scripts register synthetic accounts and leave their demonstration se
 - **A secret was entered:** treat local storage as containing it. Best-effort redaction does not recognize every secret or historical row. Rotate the credential with its provider and handle the affected data.
 
 For the credential-free compatible-provider demonstration, continue with [AI Workspace setup](ai-workspace.md).
+
+## M5 synthetic Judge validation
+
+The real execution backend remains unavailable. `PRAXIOJ_JUDGE_BACKEND=mock` explicitly selects the fixed synthetic test harness; `unavailable` is the default and other values fail configuration. It accepts only administrators operating on their own fixed `release-plan` submission. Participants cannot select code, commands, evaluator modules, policy or images.
+
+Against the Compose API, use the synthetic smoke below. It uses the existing trusted container role CLI only to promote the newly generated test account, then verifies authenticated HTTP behavior and erases that account. This bootstrap subprocess is outside the Mock backend. Use loopback only and preserve the existing database volume.
+
+```sh
+python3 scripts/smoke-m5.py --expect-unavailable
+PRAXIOJ_JUDGE_BACKEND=mock docker compose up -d --wait api
+python3 scripts/smoke-m5.py --restart-api
+docker compose up -d --wait api
+```
+
+The script defaults to `http://127.0.0.1:8000` and container `praxioj-api-1`; explicit options support another local API container. Direct API access avoids a stale reverse-proxy address when only API is recreated. The flow verifies original evaluation/Trace preservation, idempotent creation, accepted Mock assessment, duplicate-result/cancel blocking, safe export and deletion. No untrusted code or paid Provider is used.
+
+Judge capacity has separate `PRAXIOJ_JUDGE_*` settings in `.env.example`: default 2 active and 32 retained jobs per account, 16 pending and 2 running globally, 256 retained globally, 2 MiB/16 MiB reserved output capacity per account/system and a 15-second lease. Every active job reserves 64 KiB until terminalization; these are logical admission bounds, not CPU/disk isolation or provider billing. There is one attempt per job and no automatic replay. Independent maintenance also reconciles expired Judge authority.
+
+See [protocol and capability validation](../specifications/execution-protocol.md), [Broker operations](../architecture/execution-broker.md), and [M5 validation](validation-m5.md). Linux/KVM execution, Windows behavior and OS file-object collection remain outside this milestone.

@@ -1,10 +1,12 @@
-# Future execution-isolation architecture proposal
+# Execution foundation and future isolation proposal
 
-**Status: design only.** M4 does not enable arbitrary code, a terminal, untrusted containers or external evaluator execution. Public deployment remains unsupported. This proposal is separate from the current trusted AI worker and implements no executable sandbox. The [threat model](sandbox-threat-model.md) records present controls, effective resources, attacker stories and limitations.
+**Status: M5 protocol/broker foundation; host isolation remains design only.** M5 adds a versioned contract, trusted synthetic broker and deterministic Mock backend. It does not enable arbitrary code, a terminal, untrusted containers or external evaluator execution. Public deployment remains unsupported. The [threat model](sandbox-threat-model.md) records current controls, effective resources, attacker stories and limitations.
 
 ## Present boundary and decision
 
-The current worker receives the same Compose database/provider environment as the API and has outbound network access. Its leases protect against stale writes, not malicious execution with those credentials. Its tools operate on logical database records. The Framework execution methods fail closed and the evaluator registry includes only compiled-in trusted evaluators. Sources: `compose.yaml:95`, `compose.yaml:102`, `apps/api/src/praxioj_api/jobs.py:49`, `apps/api/src/praxioj_api/workspace.py:8`, `packages/framework/src/praxioj/execution/__init__.py:45`, `packages/framework/src/praxioj/evaluation/__init__.py:276`.
+The current worker receives the same Compose database/provider environment as the API and has outbound network access. Its leases protect against stale writes, not malicious execution with those credentials. Its tools operate on logical database records. The legacy host-execution methods fail closed and the evaluator registry includes only compiled-in trusted evaluators. M5 adds a separate synthetic request/result interface, not an executable host backend. Sources: `compose.yaml:104`, `compose.yaml:111`, `apps/api/src/praxioj_api/jobs.py:49`, `apps/api/src/praxioj_api/workspace.py:8`, `packages/framework/src/praxioj/execution/__init__.py:49`, `packages/framework/src/praxioj/evaluation/__init__.py:276`.
+
+M5 implements Phase 1 through [Execution Broker](execution-broker.md) and the [protocol/capability contract](../specifications/execution-protocol.md). The default Judge backend is unavailable; explicit Mock mode admits only administrator-owned fixed synthetic submissions. The broker pins input/policy/image/criterion identities, reserves output allowance, issues a server-state opaque attempt capability and validates the returned synthetic result before separate assessment storage. Broker code remains trusted Platform code with database authority. Its Mock receives only an execution request, without application credentials or capability tokens; this is interface separation inside a trusted process, not host confinement.
 
 The proposed first supported runner is a **separate nonprivileged execution service on a dedicated, disposable Linux execution host/VM**, with one sandbox per job attempt. The API and trusted AI worker remain in the control plane. The execution service receives no platform DB connection, provider key, session cookie, repository checkout, backup mount or Docker administrator socket. It obtains one narrowly scoped job capability from a broker. Linux host/runtime selection is a prerequisite; native macOS/Windows and Docker Desktop must not silently fall back to host subprocesses or ordinary containers.
 
@@ -26,7 +28,8 @@ flowchart TB
     API["API / account and manifest authorization"]
     DB[("Platform DB")]
     AI["Trusted AI worker / provider credentials"]
-    Broker["Future execution broker / result validation"]
+    Broker["M5 trusted broker / result validation"]
+    Mock["M5 in-memory synthetic Mock"]
   end
   subgraph Host["Dedicated execution host — future"]
     Launcher["Minimal reviewed launcher / policy setup"]
@@ -37,7 +40,10 @@ flowchart TB
   end
   API --> DB
   AI --> DB
-  API -.->|"Authorized immutable request"| Broker
+  API -->|"Authorized fixed synthetic request"| Broker
+  Broker -->|"Request only / no secrets"| Mock
+  Mock -->|"Untrusted result envelope"| Broker
+  Broker -->|"Current synthetic persistence"| DB
   Broker -.->|"One attempt capability; no DB credentials"| Worker
   Worker -.-> Launcher
   Launcher -.-> Code
@@ -55,6 +61,8 @@ The privileged setup component, if required by the selected runtime, is part of 
 The Framework keeps pure contracts for execution requests, limits, artifact metadata and results. Runtime-specific lifecycle code, broker authentication and storage adapters belong outside the standalone Framework's web/ORM-free core. No handler registration or manifest field may import a participant package in the API or trusted AI worker.
 
 ## Request, capability and result protocol
+
+This sequence describes the additional real-runner workflow. M5 implements its request/capability/result checks using only a trusted synthetic dispatcher; it does not instantiate the guest, host watchdog or remote result channel.
 
 1. The API authenticates the caller, checks problem/session ownership and pinned version policy, reserves shared capacity, then records an execution request. Existing owner and retry-digest patterns remain authoritative: `apps/api/src/praxioj_api/services.py:18`, `apps/api/src/praxioj_api/workspace_routes.py:32`.
 2. The broker constructs an immutable manifest binding account/session/job IDs, attempt/fence, input digest, problem/evaluator version, image digest, policy digest, maximum output, deadline and allowed operation. The client cannot substitute these fields. Resolve the account and policy server-side.
@@ -111,7 +119,7 @@ Record input/image/policy/result digests, runtime/version, enforcement decision,
 
 ## Threat-to-control and acceptance mapping
 
-All acceptance gates below are **pending for future execution**. They describe required evidence; no test result or approval is claimed by this document.
+The complete gates below remain requirements **before future hostile-code execution**. M5 implements the contract/API/capability and inline-result portions of A1, A2, A3 and A9. Actual validation evidence and remaining gaps are recorded in [M5 validation](../development/validation-m5.md); this design document does not claim that a synthetic test passes a host-isolation gate.
 
 | Gate | Threat coverage | Required evidence before enabling hostile workloads |
 | --- | --- | --- |
@@ -128,7 +136,7 @@ All acceptance gates below are **pending for future execution**. They describe r
 | A11 — retention/recovery | T8, T9 | Restored DB cannot start API, claim work or run maintenance; mismatched/unavailable cluster identity denies backup/restore work; current deletion decisions block future promotion when absent; downloaded copies documented separately |
 | A12 — review and measurement | All | Dedicated optimization/hardening review, independent security review, pinned runtime/host evidence, positive/negative/boundary regression results and comparable baseline/candidate measurements with skips disclosed |
 
-The present restore checks remain useful but independent: `apps/api/src/praxioj_api/backup.py:96` binds native and subprocess database identity; `apps/api/src/praxioj_api/backup.py:214` installs quarantine before restore; `apps/api/src/praxioj_api/backup.py:238` revokes restored sessions. API startup, worker claim and maintenance check quarantine at `apps/api/src/praxioj_api/main.py:54`, `apps/api/src/praxioj_api/jobs.py:105` and `apps/api/src/praxioj_api/maintenance.py:15`. There is no automatic promotion or malicious-archive confinement. Historical backup/client-copy erasure requires the separate [data governance](../development/data-governance.md) and [backup](../development/backup-restore.md) procedures.
+The present restore checks remain useful but independent: `apps/api/src/praxioj_api/backup.py:96` binds native and subprocess database identity; `apps/api/src/praxioj_api/backup.py:214` installs quarantine before restore; `apps/api/src/praxioj_api/backup.py:238` revokes restored sessions. API startup, worker claim and maintenance check quarantine at `apps/api/src/praxioj_api/main.py:58`, `apps/api/src/praxioj_api/jobs.py:105` and `apps/api/src/praxioj_api/maintenance.py:15`. There is no automatic promotion or malicious-archive confinement. Historical backup/client-copy erasure requires the separate [data governance](../development/data-governance.md) and [backup](../development/backup-restore.md) procedures.
 
 Acceptance tests must use disposable local infrastructure, synthetic data and controlled fixtures after explicit implementation authorization. Escape probes require a separately scoped security exercise; this document does not authorize running exploits or untrusted code. No paid/live LLM service is needed.
 
@@ -136,9 +144,9 @@ Acceptance tests must use disposable local infrastructure, synthetic data and co
 
 | Phase | Deliverable | Exit condition |
 | --- | --- | --- |
-| 0 — M4 design, current | Threat model, boundaries, proposal and acceptance matrix; execution remains unavailable | Docs/source consistency, unresolved assumptions stated; no runtime enablement |
-| 1 — contracts and broker prototype | Versioned immutable request/result schemas, narrow capability interface, mock backend, capacity reservations | A1–A3/A9 contract and authorization tests; no guest execution; choose host/backend requirements |
-| 2 — isolated synthetic harness | Dedicated local Linux host/VM, pinned backend/image, nonprivileged supervisor and independent reaper | Explicitly authorized synthetic workloads; A4–A7/A10 measured; no participant entry point |
+| 0 — M4 design, completed | Threat model, boundaries, proposal and acceptance matrix; execution remains unavailable | Docs/source consistency, unresolved assumptions stated; no runtime enablement |
+| 1 — M5 foundation, implemented | Versioned immutable request/result schemas, narrow server-state capability interface, deterministic Mock backend, capacity reservations and separate synthetic assessment | A1–A3/A9 contract and authorization tests documented in M5 validation; no guest execution or remote runner channel |
+| 2 — M6 candidate isolated harness | Dedicated local Linux host/VM, pinned backend/image, nonprivileged supervisor and independent reaper | Explicitly authorized synthetic workloads; A4–A7/A10 measured; no participant entry point |
 | 3 — adversarial evaluation | Packages/evaluator separation, controlled parser/containment tests, patch and incident procedures | A8/A9 and independent scoped security review; findings remediated or feature remains blocked |
 | 4 — complete integration | Brokered API workflow, durable state, cancellation, privacy/retention, operational admission | A1–A12 pass with actual outputs/skips; dedicated post-implementation optimization/hardening pass and maintainer sign-off |
 | Separate decision — exposure | Any proposal to support real users, public service or broader network capability | New deployment/privacy/abuse review; never implied by local isolation acceptance |

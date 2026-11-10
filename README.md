@@ -9,7 +9,9 @@ PraxiOJ provides the infrastructure for authors to define problems and evaluate 
 
 The **Framework** is an independently installable Python library for problem manifests, AI provider adapters, traces, evaluation, and execution contracts. The **Platform** adds a FastAPI REST API, PostgreSQL persistence, and a React participant workspace. Framework code never imports the web server, ORM, or frontend.
 
-Milestone 4 adds password confirmation and session management, shared request limits, account/problem/system budgets, worker operations, independent maintenance, private data export/deletion, and verified PostgreSQL backup/restore procedures. Restored databases are quarantined and cannot serve requests or execute jobs. It preserves M3 authentication, roles, the durable worker queue, trace retention/integrity, evidence evaluation, and the AI Workspace. The default Mock Provider needs no credentials. A server-configured OpenAI-compatible Chat Completions adapter can connect to hosted APIs or local LLM endpoints. Three sample problems demonstrate text and trace-based rubrics. Future execution isolation is designed, not enabled: there is no arbitrary code execution, terminal, security sandbox, or Judge Worker.
+Milestone 5 adds a versioned execution protocol, a separate persistent Execution Broker, single-attempt capabilities, strict result/artifact validation and a deterministic Mock Judge. The Judge defaults to unavailable. An explicit local test setting enables only administrator-owned fixed synthetic fixtures; no participant code or external evaluator runs. Accepted synthetic assessments remain separate from existing Evaluation scores and always identify their Mock provenance.
+
+M4 account/session controls, shared quotas, worker operations, maintenance, data export/deletion and verified quarantined PostgreSQL restore remain supported. The AI Workspace retains Mock and server-configured OpenAI-compatible providers, bounded logical file tools, Trace integrity/retention and three sample problems. No credentials are needed for normal tests.
 
 > Development preview only. Keep it on localhost. Account sessions and role checks are implemented, but production hardening and public deployment support are not established. Do not enter secrets or sensitive personal data.
 
@@ -71,6 +73,43 @@ print(result.model_dump_json(indent=2))
 
 No API server, database, or frontend is required for this example. See [problem format](docs/specifications/problem-format.md) to create a new manifest and [evaluation contract](docs/specifications/evaluation-contract.md) for evaluator extension boundaries.
 
+## Exercise the execution contract
+
+The standalone Framework can validate a synthetic request and map its fixed Mock response into the existing evaluation result shape:
+
+```python
+import asyncio
+from datetime import UTC, datetime, timedelta
+from uuid import uuid4
+from praxioj.execution import MockJudgeBackend, build_mock_request
+from praxioj.evaluation.execution import validate_and_assess_synthetic_execution
+
+request = build_mock_request(
+    request_id=uuid4(), job_id=uuid4(), attempt_id=uuid4(), session_id=uuid4(),
+    fence=1, submission_id=uuid4(), trace_head_sha256=None, trace_next_sequence_number=1,
+    deadline=datetime.now(UTC) + timedelta(seconds=60),
+    criteria=[{"id": "fixture", "title": "Synthetic check", "max_score": 100.0}],
+)
+raw = asyncio.run(MockJudgeBackend().execute(request))
+result, assessment = validate_and_assess_synthetic_execution(request, raw)
+print(result.status, assessment.provenance, assessment.independent_execution_evidence)
+# completed synthetic_mock False
+```
+
+This uses a synthetic empty Trace checkpoint; the Platform Broker separately verifies the persisted owner's submission and Trace. See the [execution protocol](docs/specifications/execution-protocol.md) and [Broker architecture](docs/architecture/execution-broker.md) for authority, limits, lifecycle and acceptance gates.
+
+For the full local test flow, start the default Compose stack and verify unavailable behavior. The smoke script creates its own synthetic account and uses the existing local operator CLI to grant that account administrator status:
+
+```sh
+python3 scripts/smoke-m5.py --expect-unavailable
+PRAXIOJ_JUDGE_BACKEND=mock docker compose up -d --wait api
+python3 scripts/smoke-m5.py --restart-api
+# Return to the default after testing:
+docker compose up -d --wait api
+```
+
+Only the API's fixed synthetic test harness is enabled. The Mock receives a bounded request without platform credentials and uses no host process, network, file collector or participant import. It does not establish OS isolation. An actual isolated runner remains a separately reviewed M6 task.
+
 ## Repository
 
 ```text
@@ -83,7 +122,7 @@ packages/framework/     Installable praxioj package
   src/praxioj/tools/      Permission checks, schemas, bounded logical file tools
   src/praxioj/tracing/    Event envelope, collector contract, redaction
   src/praxioj/evaluation/ Evaluation contracts and trusted deterministic evaluator
-  src/praxioj/execution/  Execution interface; no sandbox implementation
+  src/praxioj/execution/  Versioned protocol and Mock; real execution unavailable
 examples/problems/      Minimal versioned sample package
 tests/                  Framework, API, migration, integration tests
 docs/                   Architecture, specifications, development guides
@@ -98,7 +137,7 @@ make install
 make test
 ```
 
-Python tests use isolated databases and local HTTP fixtures; frontend tests exercise requests and interactions with mocked HTTP responses. External provider tests require explicit opt-in and otherwise skip. PostgreSQL integration, synthetic backup/restore and full-stack smoke checks are separate checks; see the [M4 validation record](docs/development/validation-m4.md), historical [M3 validation](docs/development/validation-m3.md), [Preflight report](docs/development/preflight-validation.md), historical [M2 validation](docs/development/validation-m2.md) and [M1 validation](docs/development/validation.md). See [version choices](docs/development/versions.md) for dependency pins.
+Python tests use isolated databases and local HTTP fixtures; frontend tests exercise requests and interactions with mocked HTTP responses. External provider tests require explicit opt-in and otherwise skip. PostgreSQL integration, synthetic backup/restore and full-stack smoke checks are separate checks; see the [M5 validation record](docs/development/validation-m5.md), historical [M4 validation](docs/development/validation-m4.md), historical [M3 validation](docs/development/validation-m3.md), [Preflight report](docs/development/preflight-validation.md), historical [M2 validation](docs/development/validation-m2.md) and [M1 validation](docs/development/validation.md). See [version choices](docs/development/versions.md) for dependency pins.
 
 ## Design and next steps
 
