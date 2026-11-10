@@ -141,13 +141,19 @@ def test_deletion_query_count_is_independent_of_owned_session_count(app):
 
 def test_export_user_quota_is_private_and_erased(client, app):
     owner = client.get("/api/auth/me").json()["user"]["id"]
+    other_owner = str(uuid4())
+    # This legitimate timestamp contains the other account's numeric sentinel.
+    # Ownership assertions must inspect fields, not substrings of serialized JSON.
+    window = utcnow().replace(microsecond=799928)
     with app.state.session_factory.begin() as db:
-        db.add(QuotaBucket(key="a" * 64, scope="user", subject=owner, window_start=utcnow(), model_calls=2))
-        db.add(QuotaBucket(key="b" * 64, scope="user", subject=str(uuid4()), window_start=utcnow(), model_calls=999))
+        db.add(QuotaBucket(key="a" * 64, scope="user", subject=owner, window_start=window, model_calls=2))
+        db.add(QuotaBucket(key="b" * 64, scope="user", subject=other_owner, window_start=window, model_calls=999))
     confirm(client)
     payload = client.post("/api/auth/export", json={}).json()
     assert [row["model_calls"] for row in payload["account_usage"]] == [2]
-    assert "999" not in json.dumps(payload)
+    assert "799928" in payload["account_usage"][0]["window_start"]
+    assert other_owner not in json.dumps(payload)
     assert client.post("/api/auth/delete", json={}).status_code == 200
     with app.state.session_factory() as db:
         assert db.scalar(select(func.count()).select_from(QuotaBucket).where(QuotaBucket.subject == owner)) == 0
+        assert db.scalar(select(QuotaBucket.model_calls).where(QuotaBucket.subject == other_owner)) == 999
