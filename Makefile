@@ -1,4 +1,4 @@
-.PHONY: install test test-python test-web build-web migrate register api web up down
+.PHONY: install test test-python test-web build-web migrate register api worker web up down
 
 install:
 	python3 -m venv .venv
@@ -22,9 +22,13 @@ migrate:
 register:
 	.venv/bin/python -m praxioj_api.cli register examples/problems/release-plan
 	.venv/bin/python -m praxioj_api.cli register examples/problems/workspace-plan
+	.venv/bin/python -m praxioj_api.cli register examples/problems/evidence-plan
 
 api:
 	.venv/bin/uvicorn praxioj_api.main:app --host 127.0.0.1 --port 8000 --reload
+
+worker:
+	.venv/bin/python -m praxioj_api.worker
 
 web:
 	npm --prefix apps/web run dev -- --host 127.0.0.1

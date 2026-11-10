@@ -6,10 +6,10 @@
 | `praxioj.problems` | Manifest schema, canonical digest, directory validation, public projection | SQL storage, authorization, evaluator imports |
 | `praxioj.runtime` | Provider contract, messages, model configuration, nullable usage, mock/compatible adapters, capabilities, deadlines | Provider secrets in the browser, tool orchestration or arbitrary execution |
 | `praxioj.tools` | Explicit trusted registry, input/output schemas, authorization policy, bounded logical file operations | Host filesystem, network requests, shell, dynamic plugin imports |
-| `praxioj.tracing` | Versioned envelope, event types, collector/query contracts, redaction | Platform session ownership decisions |
+| `praxioj.tracing` | Versioned envelope, event types, collector/query contracts, redaction, canonical hash verification | Platform session ownership decisions |
 | `praxioj.evaluation` | Input/output contracts, evidence, trusted evaluator registry and execution contract | Importing user modules, HTTP, contestant code execution |
 | `praxioj.execution` | Workspace/file/tool/resource/network/artifact lifecycle interfaces | A claimed or improvised sandbox |
-| `praxioj_api` | SQL models, transactions, identity scope, safe REST serialization, local registration | Defining author-specific task content, running untrusted code |
+| `praxioj_api` | SQL models, account/role authorization, durable jobs, leases, retention, safe REST serialization | Defining author-specific task content, running untrusted code |
 | `apps/web` | Participant interaction and rendering of API data | Secrets, evaluator configuration, authoritative scoring |
 
 ```mermaid
@@ -27,6 +27,7 @@ flowchart TD
     Tracing --> Core
     Execution[praxioj.execution] --> Core[praxioj.core]
     Problems --> Core
+    Problems --> Tracing
     Runtime --> Core
 ```
 
@@ -36,4 +37,4 @@ Arrows show allowed conceptual dependencies, not a requirement that every module
 
 Problem authors extend the system today through declarative, versioned manifests and supported evaluator configuration. Authors cannot currently upload a Python plugin and cause it to execute. This is an intentional limit of the safe foundation.
 
-There is no `workers/judge` implementation or empty worker directory. A future worker will own isolated execution, scheduling, resource accounting, and cleanup, while exchanging the existing evaluation contracts with the API. M2 runs are bounded in-process asynchronous tasks in a single API process; they do not execute contestant code.
+`praxioj_api.worker` is a separate trusted AI runtime process, backed by `jobs.py` and PostgreSQL. It owns leases, heartbeats, runtime orchestration and periodic retention cleanup. It does not execute contestant code. A future isolated Judge remains a separate boundary; implementing the current worker does not provide that sandbox.

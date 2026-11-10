@@ -1,98 +1,147 @@
 # Local setup
 
-All commands run from the repository root unless stated otherwise. This milestone is localhost-only. Keep the same browser host (`127.0.0.1` or `localhost`) throughout a solve so its cookie is retained.
+Run commands from the repository root. Milestone 3 adds accounts and a separate PostgreSQL worker, but remains a localhost development preview. Use the same browser host (`127.0.0.1` or `localhost`) throughout a session. No API key is needed for the default Mock provider.
 
 ## Docker Compose
 
-Use Docker with Compose v2 and a running engine:
+With Docker Compose v2 and a running engine:
 
 ```sh
 docker compose config --quiet
 docker compose up --build -d --wait
 ```
 
-Open http://127.0.0.1:5173. OpenAPI documentation: http://127.0.0.1:8000/api/docs. API health: http://127.0.0.1:8000/api/health.
+Open http://127.0.0.1:5173 and register an account using the UI. There is no default administrator or password. API documentation is at http://127.0.0.1:8000/api/docs; health is at http://127.0.0.1:8000/api/health.
 
-The API waits for PostgreSQL health, applies Alembic migrations, registers both samples idempotently, then starts FastAPI. Web waits for the API. Images are explicitly versioned. The API runs as an unprivileged container user. Only web and API loopback ports are published. PostgreSQL and API share an internal backend network; API and web share a normal bridge network that permits Docker port publishing. The default database is unpublished. API/web outbound network access is not restricted by this setup; it is not an execution sandbox.
+The API waits for PostgreSQL, applies migrations, and idempotently registers `release-plan`, `workspace-plan`, and `evidence-plan`. The worker starts after API health succeeds and polls the durable queue. Web serves the UI and proxies `/api`. API startup itself does not execute queued AI work. The worker uses the same image and server-side environment as the API; it publishes no port. Both run as an unprivileged container user.
 
 ```sh
 docker compose ps
-docker compose logs api
+docker compose logs --tail=100 api worker
 python3 scripts/smoke.py
+python3 scripts/smoke-m2.py
+python3 scripts/smoke-m3.py --base-url http://127.0.0.1:5173
+```
+
+Only API and web loopback ports are published. PostgreSQL shares an internal backend network with API/worker and is unpublished by default. API/worker also use the normal bridge network for configured provider connections. Outbound networking is not isolated; these containers are not an untrusted-code sandbox. Use `config --quiet`, not an expanded configuration dump that could reveal optional credentials.
+
+To grant a role to an account already registered through the UI:
+
+```sh
+docker compose exec api python -m praxioj_api.cli set-role your_username author
+```
+
+Replace `your_username` with the registered username. The role can be `participant`, `author`, or `administrator`; the command revokes that account's login sessions and records a role-change audit. Sign in again afterward. Operator shell/database access is trusted. Legacy M2 browser identities cannot be promoted using this command.
+
+Stop the local stack with:
+
+```sh
 docker compose down
 ```
 
-`down` preserves the database volume. Do not remove the volume unless you intend to delete all local sessions and submissions. A normal rebuild must not overwrite an existing problem version with modified content; bump its version instead.
+This preserves the database volume. Do not remove the volume to fix a migration or version conflict. A changed problem needs a new immutable version.
 
-## Native Python and Vite with PostgreSQL
+## Native API, worker, and Vite
 
-Use Python 3.13 and Node 24 LTS. The frontend package also accepts Node 22.12+ on the 22.x line or Node 26+; Node 24.11.0 is the available local validation runtime. Install dependencies:
+Use Python 3.13 and Node 24 LTS. The frontend also declares support for Node 22.12+ on the 22.x line and Node 26+; the recorded host runtime is Node 24.11.0. Install the pinned dependencies:
 
 ```sh
 python3 -m venv .venv
-. .venv/bin/activate
-python -m pip install -c requirements.lock -e packages/framework -e 'apps/api[test]'
+.venv/bin/python -m pip install -c requirements.lock -e packages/framework -e 'apps/api[test]'
 npm --prefix apps/web ci
 ```
 
-Start only PostgreSQL with its optional loopback port (the override also attaches it to the normal bridge network so Docker can publish that port):
+Start PostgreSQL with its optional loopback port. If the full Compose stack is already running, stop its API/worker/web first so the native setup has one intended set of executors:
 
 ```sh
+docker compose stop api worker web
 docker compose -f compose.yaml -f compose.native.yaml up -d --wait db
 ```
 
-Alternatively, create a local PostgreSQL database and set its SQLAlchemy URL. The API uses environment variables, not implicit `.env` loading:
+The native override attaches PostgreSQL to the normal bridge for `127.0.0.1:5432` publishing. Alternatively use another local PostgreSQL database. These displayed database credentials are public development defaults, not production secrets.
+
+In terminal 1, migrate, register all three examples, and start the API:
 
 ```sh
 export DATABASE_URL='postgresql+psycopg://praxioj:praxioj@127.0.0.1:5432/praxioj'
 export PRAXIOJ_ENV=development
-alembic -c apps/api/alembic.ini upgrade head
-python -m praxioj_api.cli register examples/problems/release-plan
-python -m praxioj_api.cli register examples/problems/workspace-plan
-uvicorn praxioj_api.main:app --host 127.0.0.1 --port 8000 --reload
+export PRAXIOJ_DEFAULT_PROFILE=mock
+make migrate register
+make api
 ```
 
-In a second terminal:
+In terminal 2, from the same repository root, start the separate worker with the same database and provider configuration:
 
 ```sh
-npm --prefix apps/web run dev -- --host 127.0.0.1
+export DATABASE_URL='postgresql+psycopg://praxioj:praxioj@127.0.0.1:5432/praxioj'
+export PRAXIOJ_ENV=development
+export PRAXIOJ_DEFAULT_PROFILE=mock
+make worker
 ```
 
-Vite proxies `/api` to the local API. No provider API key is needed. Do not set `--host 0.0.0.0` for native development or expose this service using a public tunnel.
+In terminal 3:
+
+```sh
+make web
+```
+
+Open http://127.0.0.1:5173, register or sign in, and choose a problem. Vite proxies `/api` to the native API. The commands start one API and one worker; PostgreSQL claim/fence tests also exercise competing workers. The API's development reloader does not restart the worker, so restart `make worker` after changing worker code or configuration.
+
+Native processes read exported environment variables, not an implicit `.env` file. Export settings separately in **both** API and worker terminals. Compose reads its optional root `.env` and supplies the shared runtime environment automatically. See [.env.example](../../.env.example); do not commit an actual `.env` or use `VITE_` variables for secrets. Keep native API/Vite bound to `127.0.0.1`; do not use public tunnels or expose this preview on a public interface.
+
+Native role management uses the same database environment:
+
+```sh
+.venv/bin/python -m praxioj_api.cli set-role your_username author
+```
+
+See [authentication](authentication.md) for cookie/CSRF behavior, session expiry, rate limits, and legacy identity quarantine. `PRAXIOJ_COOKIE_SECURE=false` supports the documented localhost HTTP flow; HTTPS development can set it to true. This flag does not install TLS or make a public deployment supported.
 
 ## Validation
 
+With the Python dependencies installed:
+
 ```sh
-. .venv/bin/activate
-python -m pytest
+.venv/bin/python -m pytest
 npm --prefix apps/web test -- --run
 npm --prefix apps/web run build
-python scripts/smoke.py
-python scripts/smoke-m2.py
+.venv/bin/python -m pip check
+.venv/bin/python scripts/sync-licenses.py --check
 ```
 
-Framework/API unit tests use isolated test storage and run without a live AI provider. Vitest uses mocked fetch to check UI behavior. The smoke script uses actual HTTP, browser-style cookies, persisted sessions, chat, final submission, evaluation, and access checks against the running stack. It creates a new local sample session each run. Its default API endpoint is `http://127.0.0.1:8000`; use `--base-url http://127.0.0.1:5173` to also exercise the web proxy.
-
-Run the same API/migration suite against PostgreSQL after starting the optional native database port:
+The default suite uses isolated SQLite test storage where applicable. PostgreSQL-only concurrency/process cases explicitly skip without a database URL; the opt-in live-provider test also skips. Vitest uses controlled fetch responses. To run the complete Python suite, including PostgreSQL migrations, row locks, separate worker processes, and local HTTP fixture cases:
 
 ```sh
-PRAXIOJ_TEST_DATABASE_URL='postgresql+psycopg://praxioj:praxioj@127.0.0.1:5432/praxioj' python -m pytest tests/api
+PRAXIOJ_RUN_LIVE_TESTS=0 \
+PRAXIOJ_TEST_DATABASE_URL='postgresql+psycopg://praxioj:praxioj@127.0.0.1:5432/praxioj' \
+.venv/bin/python -m pytest
 ```
 
-The test fixture creates a uniquely named temporary schema per test, applies the real migration in it, and drops that schema afterward; the configured PostgreSQL user therefore needs schema-creation privileges. It does not truncate normal application tables. Use a disposable local database, not a production connection.
+Each API test creates a unique temporary schema, migrates it, and drops it afterward. The test database user needs schema-creation privileges; normal application tables are not truncated. Use a disposable local database, never a production connection. SQLite does not establish PostgreSQL locking guarantees.
 
-Migrations must be exercised against PostgreSQL as well as any SQLite test path. See [M2 validation record](validation-m2.md) and historical [M1 validation](validation.md) for the commands actually executed in this environment and their limitations. A SQLite pass does not establish PostgreSQL row-lock behavior; a web build does not establish a successful browser flow.
+Against the running API **and worker**, run the actual HTTP flows:
+
+```sh
+python3 scripts/smoke.py
+python3 scripts/smoke-m2.py
+python3 scripts/smoke-m3.py
+python3 scripts/smoke-m3.py --base-url http://127.0.0.1:5173
+```
+
+The scripts register synthetic accounts and leave their demonstration sessions/results in the local database. `smoke.py` preserves the foundation flow; `smoke-m2.py` checks tools, drafts, idempotency and ownership; `smoke-m3.py` uses the six-criterion `evidence-plan` rubric and verifies Trace integrity. The web-proxy variant includes nginx or Vite routing. A successful build alone does not verify this flow. M1/M2 validation documents remain historical records; current execution results belong in the M3 validation report.
 
 ## Troubleshooting
 
-- **Cannot connect to the Docker daemon:** start Docker Desktop/engine and wait for `docker info` to succeed. A Compose file validation does not start containers.
-- **API cannot reach the database:** check `docker compose ps`, database health, and `DATABASE_URL`; `db` is a container hostname, while native Python uses `127.0.0.1`.
-- **Port already in use:** stop the conflicting local process. The supported demo origins are explicit, so changing web ports also requires an intentional allowlist update.
-- **Session not found after changing browsers/hosts:** local identities are cookie-scoped. Reopen the original host/profile or start a new session.
-- **Registration conflict:** the same ID/version already exists with different canonical content. Choose a new version; do not mutate historical records.
-- **Foreign Origin or Host rejected:** use the documented localhost URLs and same-origin proxy. This is a development boundary, not a deployment configuration option.
-- **A secret was entered:** treat the database as containing that secret. Recognized tokens and the configured provider key are scrubbed before new conversation/draft/submission writes, but arbitrary text and historical rows can still contain unrecognized secrets. Rotate the exposed secret through its provider and handle the local data accordingly.
+- **Cannot connect to Docker:** start the engine and confirm `docker info` succeeds. Compose configuration validation does not start containers.
+- **Database unavailable:** inspect service health and `DATABASE_URL`; `db` is a container hostname, while native processes use `127.0.0.1`.
+- **Run remains queued:** ensure the worker is running against the same database and migrated schema. API health does not imply worker availability.
+- **Run failed after a worker crash:** lease recovery records a terminal failure without automatically replaying an uncertain provider request. Inspect the safe job error; an explicit new attempt consumes a new allowance.
+- **Login expired or role changed:** sign in again. Authentication restores access to the same account's stored sessions; old M2 browser cookies do not become accounts.
+- **401/403 from an API client:** authenticate with an allowed Origin, preserve cookies, and send the returned `X-CSRF-Token` on authenticated writes. The UI handles this protocol.
+- **429 while authenticating:** wait for the fixed throttle window. Forwarded IP headers do not bypass it.
+- **Trace expired:** evaluation results remain available with expired evidence references; the worker performs physical cleanup. See [retention](../architecture/trace-retention.md).
+- **Version registration conflict:** the existing ID/version has different canonical content. Increment the version instead of editing stored history.
+- **Port or Origin mismatch:** use the documented loopback URLs. New ports require a deliberate server allowlist change.
+- **A secret was entered:** treat local storage as containing it. Best-effort redaction does not recognize every secret or historical row. Rotate the credential with its provider and handle the affected data.
 
-## AI Workspace and compatible providers
-
-See [AI Workspace setup](ai-workspace.md) for capability flags, server-only provider configuration, cancellation/retry semantics, missing usage, and a loopback HTTP fixture that needs no credentials. The default remains Mock. Use a single API process; multiple Uvicorn workers are unsupported.
+For the credential-free compatible-provider demonstration, continue with [AI Workspace setup](ai-workspace.md).

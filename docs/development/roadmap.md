@@ -1,23 +1,17 @@
 # Roadmap
 
-## Milestone 1: foundation
+## Completed foundation
 
-The foundation provides the independent Problem SDK, provider/runtime contracts and Mock Provider, trace envelope, deterministic evaluation, execution interfaces, PostgreSQL REST API, and participant workflow. Those interfaces and the original sample remain supported.
+M1 provides the independent Problem SDK, Runtime/Mock contracts, trace/evaluation interfaces, PostgreSQL API and original sample. M2 adds compatible providers, bounded logical tools, persistent conversation/drafts, usage, cancellation and the Workspace UI. Their manifest digests and core regression scenarios remain supported.
 
-## Milestone 2: AI Workspace
+M3 adds Argon2id accounts and server sessions, CSRF and backend roles, immutable author publishing, a PostgreSQL job repository and separate workers, ownership leases/fencing, trace integrity/retention and deterministic evidence criteria. It preserves Mock and local fixture testing without credentials. See [M3 validation](validation-m3.md) and the [GitHub preflight report](preflight-validation.md) for actual checks and remaining limits.
 
-M2 implements a compatible Chat Completions adapter, explicit provider capabilities, asynchronous conversational runs, saved drafts, constrained logical file tools, authorization events, usage/cost-estimate accounting, cancellation/recovery, and participant trace inspection. No credentials are required for Mock or local HTTP fixture tests. See [M2 validation](validation-m2.md) for executed checks and unverified live-provider behavior.
+## Milestone 4 recommendations
 
-## Milestone 3: recommended priorities
+1. Conduct a deployment-focused security review before any public hosting: TLS/proxy trust, registration abuse controls, global/account quotas, request budgets, monitoring and incident procedures. Add MFA, account recovery and verified identities where the product needs them.
+2. Expand worker operations: deployment migrations separated from API startup, queue fairness, worker health/metrics, maintenance scheduling independent of worker availability, operator recovery tools and long-running load/fault tests. Preserve explicit uncertain provider outcomes instead of transparent retries.
+3. Mature data governance: participant export/deletion UI, backup lifecycle, field-level minimization, encrypted storage/secret management, audited author review UX and externally anchored or signed evidence when justified. Distinguish retained evaluation results from expired underlying evidence.
+4. Extend author evaluation contracts only with observable, validated evidence. Build a separately isolated execution boundary before accepting external Python evaluators or contestant code. Current workers and containers do not provide that isolation.
+5. Add opt-in real provider/model conformance, usage reconciliation and price-version handling. Fixture success proves protocol behavior, not model quality, universal provider compatibility or exact billing. Streaming can follow a concrete usability need.
 
-1. **Identity and access:** real authentication, administrator/author/participant permissions, renewable sessions, account recovery, TLS, per-user/global quotas and rate limits. Complete a deployment security review before public hosting.
-2. **Durable scheduling:** worker ownership/leases, queued runs, per-attempt provenance, crash reconciliation, and a cancellation protocol before using multiple API processes. Preserve idempotency and do not silently retry possibly billed calls.
-3. **Trace and data lifecycle:** private vulnerability reporting, retention/deletion/export, access audit, encrypted storage/secrets management, configurable redaction, and process-oriented evaluation with validated evidence references.
-4. **Provider conformance:** opt-in real endpoint tests, model-specific compatibility, streaming if needed, usage reconciliation, and pricing versions. Fixture success proves protocol handling, not every provider/model's behavior.
-5. **Author workflows and judging:** authenticated version publishing, protected private resources, richer rubrics and reproducible evaluator metadata. Design and prove an isolated worker boundary before accepting external evaluators or contestant code; logical files are not a sandbox.
-
-Distributed judges, contests, leaderboards, billing, generic browser automation, and unrestricted terminal access remain outside M2. Add infrastructure only when the product needs it.
-
-## Public repository versus public service
-
-Publishing Apache-2.0 source does not make the application safe to expose publicly. Preserve contributor copyright, bundled third-party notices, and the project's independent personal identity. Review source and generated artifacts for secrets before publishing. Keep current deployments on localhost until authentication, abuse controls, data handling, and any necessary execution isolation have been implemented and reviewed.
+Contests, billing, leaderboards, general browser automation, unrestricted terminal access and distributed untrusted Judge workers remain separate future scopes. PraxiOJ remains an independent hobby project under Apache-2.0; contributor and third-party rights remain intact.

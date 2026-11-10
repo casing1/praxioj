@@ -19,7 +19,7 @@ services:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
-    environment:
+    environment: &runtime_environment
       DATABASE_URL: postgresql+psycopg://praxioj:praxioj@db:5432/praxioj
       PRAXIOJ_ENV: development
       PRAXIOJ_DEFAULT_PROFILE: ${PRAXIOJ_DEFAULT_PROFILE:-mock}
@@ -34,6 +34,14 @@ services:
       PRAXIOJ_PRICE_INPUT_PER_MILLION: ${PRAXIOJ_PRICE_INPUT_PER_MILLION:-}
       PRAXIOJ_PRICE_OUTPUT_PER_MILLION: ${PRAXIOJ_PRICE_OUTPUT_PER_MILLION:-}
       PRAXIOJ_PRICE_CURRENCY: ${PRAXIOJ_PRICE_CURRENCY:-USD}
+      PRAXIOJ_COOKIE_SECURE: ${PRAXIOJ_COOKIE_SECURE:-false}
+      PRAXIOJ_AUTH_SESSION_SECONDS: ${PRAXIOJ_AUTH_SESSION_SECONDS:-28800}
+      PRAXIOJ_WORKER_LEASE_SECONDS: ${PRAXIOJ_WORKER_LEASE_SECONDS:-15}
+      PRAXIOJ_WORKER_HEARTBEAT_SECONDS: ${PRAXIOJ_WORKER_HEARTBEAT_SECONDS:-3}
+      PRAXIOJ_WORKER_POLL_SECONDS: ${PRAXIOJ_WORKER_POLL_SECONDS:-0.5}
+      PRAXIOJ_TRACE_RETENTION_DAYS: ${PRAXIOJ_TRACE_RETENTION_DAYS:-30}
+      PRAXIOJ_TRACE_RETENTION_MAX_DAYS: ${PRAXIOJ_TRACE_RETENTION_MAX_DAYS:-90}
+      PRAXIOJ_AUDIT_RETENTION_DAYS: ${PRAXIOJ_AUDIT_RETENTION_DAYS:-90}
     ports:
       - '127.0.0.1:8000:8000'
     depends_on:
@@ -45,6 +53,18 @@ services:
       timeout: 3s
       retries: 20
       start_period: 15s
+    networks: [backend, local]
+
+  worker:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    environment: *runtime_environment
+    command: [python, -m, praxioj_api.worker]
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: on-failure
     networks: [backend, local]
 
   web:

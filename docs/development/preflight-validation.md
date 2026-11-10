@@ -1,6 +1,6 @@
 # GitHub preflight remediation and validation
 
-Reviewed on **2026-11-10 (Asia/Seoul)** for [casing1/praxioj](https://github.com/casing1/praxioj). All nine existing dependency PRs have been reviewed and resolved. The separate preflight remediation PR and its final CI remain pending, as does GitHub's refresh of two dependency alerts. This report covers Phase 0; it does not declare Milestone 3 complete.
+Reviewed on **2026-11-10 (Asia/Seoul)** for [casing1/praxioj](https://github.com/casing1/praxioj). All nine existing dependency PRs have been reviewed and resolved. The separate preflight remediation PR passed CI/CodeQL and was merged; two API Dependabot alert states remain inconsistent with the fixed current dependency graph. This report covers Phase 0; it does not declare Milestone 3 complete.
 
 PraxiOJ remains an independent personal hobby open-source project, with no official university, laboratory, or corporate affiliation. Its project license remains Apache-2.0, with `Copyright 2026 DoHyun Choi`.
 
@@ -129,6 +129,19 @@ After the nine decisions, open PRs were **0**. Dependabot alerts **#3/#4 were fi
 
 A high-confidence token/private-key pattern scan inspected **187 Git blobs across all refs** and found no matches. This was a limited heuristic scan, not proof that arbitrary secrets or personal data cannot exist. No secret values were printed.
 
-The separate remediation branch is `chore/preflight-security-remediation`. Its tested implementation commit is `2dcfae88289fa273ede8d3ebe303ccd5733dad2e`; a normal merge of updated `origin/main` produced `6ec99cb9bb7bb548540b494c469c735f2446fb8b`, preserving history without rebasing or force pushing. **Creating the separate preflight PR, passing its final CI/CodeQL, and squash merging it remain pending**, along with confirmation of alert #1/#2 refresh. Phase 0 is not yet declared complete.
+The separate remediation branch is `chore/preflight-security-remediation`. Its tested implementation commit is `2dcfae88289fa273ede8d3ebe303ccd5733dad2e`; a normal merge of updated `origin/main` produced `6ec99cb9bb7bb548540b494c469c735f2446fb8b`, preserving history without rebasing or force pushing. [Preflight PR #11](https://github.com/casing1/praxioj/pull/11) passed all required CI/CodeQL checks and was squash merged as [`4ad6e02afecf05138d8d0446a7faff2a67be4212`](https://github.com/casing1/praxioj/commit/4ad6e02afecf05138d8d0446a7faff2a67be4212). Main CI/CodeQL also passed. Actionable source remediation was complete before the separate M3 branch started; no Critical/High finding remained. Alerts #1/#2 still required GitHub state reconciliation.
 
 No live hosted LLM, local inference model, or paid provider call was required for this preflight. Public authentication, hardened multi-user isolation, distributed execution, and a secure untrusted-code sandbox are not established by these dependency changes. Existing localhost-development restrictions still apply.
+
+## Alert reconciliation follow-up
+
+After #11, GitHub's GraphQL dependency graph showed both parsed pyproject manifests selecting setuptools `= 84.2.1`. The current SBOM contained two setuptools entries, both 84.2.1, and no 82.0.1. [Dependency graph run 42744107960](https://github.com/casing1/praxioj/actions/runs/42744107960), on main 4ad6e02, submitted `/apps/api/pyproject.toml` with `setuptools@84.2.1` and received HTTP 204. Despite that evidence, alerts #1/#2 still had their original update timestamp and `fixed_at=null`. A reconciliation delay is an inference from this disagreement, not a verified internal GitHub diagnosis. No remaining vulnerable dependency source was found and no alert was dismissed to hide the mismatch. Final live status is reported with the M3 delivery.
+
+| Alert | Source / severity | Manifest | Remediation and verification | Observed GitHub state after preflight |
+| --- | --- | --- | --- | --- |
+| [#1](https://github.com/casing1/praxioj/security/dependabot/1) | Dependabot / Medium | API pyproject | Unicode sdist exclusion: 82.0.1 reproduces; 84.2.1 excludes synthetic canary; main graph fixed | Open, stale relative to current graph |
+| [#2](https://github.com/casing1/praxioj/security/dependabot/2) | Dependabot / Low | API pyproject | Legacy namespace path escape: old metadata consumer accepts path; 84.2.1 rejects before write; main graph fixed | Open, stale relative to current graph |
+| [#3](https://github.com/casing1/praxioj/security/dependabot/3) | Dependabot / Medium | Framework pyproject | Same exclusion regression and fixed version | Fixed |
+| [#4](https://github.com/casing1/praxioj/security/dependabot/4) | Dependabot / Low | Framework pyproject | Same path validation regression and fixed version | Fixed |
+
+The exclusion issue requires a normalization-mismatched filename and exclusion rule during an sdist build, plus artifact disclosure for external impact. The namespace issue requires malicious namespace metadata reaching the legacy installer, with an existing writable target (the advisory emphasizes Windows path forms). The project has no such participant-to-build-tool route, MANIFEST.in or legacy installer invocation; this limits demonstrated runtime exploitability but does not make affected dependency pins false positives.
