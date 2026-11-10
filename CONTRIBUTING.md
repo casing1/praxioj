@@ -39,4 +39,4 @@ Submit only material you have the right to contribute, including code, documenta
 
 ## Security reports
 
-Read [SECURITY.md](SECURITY.md) before reporting a vulnerability. A private reporting address has not yet been established. Do not publish credentials, participant data, or exploit details against a live service in an issue or pull request; arrange a private reporting channel with the maintainer first.
+Read [SECURITY.md](SECURITY.md) before reporting a vulnerability. Use the repository's enabled [GitHub private vulnerability reporting](https://github.com/casing1/praxioj/security/advisories/new) channel. Do not publish credentials, participant data, or exploit details against a live service in a public issue or pull request.

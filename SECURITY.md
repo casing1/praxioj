@@ -27,4 +27,4 @@ There is no untrusted execution sandbox, external evaluator runner, distributed 
 
 ## Reporting
 
-A private reporting address has not been established. Before an externally hosted service, the maintainer must add a private vulnerability channel. Public repository publication alone does not authorize public deployment. Do not post credentials, participant data, or an exploit against a live service in a public issue.
+GitHub Private Vulnerability Reporting is enabled for this repository. Use [Report a vulnerability](https://github.com/casing1/praxioj/security/advisories/new) to send a private report to the maintainer. Include affected versions, prerequisites, impact, and a minimal reproduction using synthetic data. Do not include live credentials, participant data, or private submissions. Keep security details out of public issues while the report is being assessed. Public repository publication does not authorize public deployment.
