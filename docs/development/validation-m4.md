@@ -12,8 +12,8 @@ The baseline was directly rerun before implementation on macOS/Apple Silicon, Py
 | --- | --- | --- |
 | PostgreSQL Python | 247 passed, 1 live-provider skip; 46.98 s | **298 passed, 1 live-provider skip; 91.04 s** |
 | Default SQLite Python | Historical M3: 238 passed, 10 skipped; not separately rerun before editing | **281 passed, 18 skipped; 55.30 s** |
-| Frontend | 24 passed; 3.22 s | **31 passed; 3.43 s** |
-| TypeScript/Vite | Passed; JS 262.96 kB / gzip 80.43 kB | **Passed; JS 273.87 kB / gzip 82.74 kB** |
+| Frontend | 24 passed; 3.22 s | **33 passed; 3.79 s** |
+| TypeScript/Vite | Passed; JS 262.96 kB / gzip 80.43 kB | **Passed; JS 274.37 kB / gzip 82.90 kB** |
 | CSS | 30.85 kB / gzip 7.36 kB | 31.23 kB / gzip 7.45 kB |
 
 Final Python suites ran concurrently, and M4 adds 51 cases; total suite times are not a comparable performance benchmark. SQL tests use disposable schemas; backup tests additionally create/drop only their own UUID-named synthetic databases. The named application volume is preserved. Docker builds used Python 3.13.18, Node 24.22.2 and PostgreSQL 18.6. Native Windows is not validated.
@@ -41,7 +41,7 @@ Before implementation, synthetic workloads identified unnecessary ORM materializ
 | `usage_for`, SQLite in-memory, 100 provider calls + 100 runs; seven batches of 100 warm reads, Python 3.13 | Median 1.025556 ms/read; 397,918-byte traced peak; 200 ORM rows; 2 SQL queries | Median 0.345495 ms/read; 18,368-byte peak; 2 aggregate rows; 2 SQL queries | 66.3% lower median, 95.4% lower peak in this fixture. Query count unchanged. No PostgreSQL throughput claim. |
 | Account erasure, synthetic SQLite accounts, statement counter | 1/10/50 sessions: 14/95/455 SQL statements | 1/10/50 sessions: 15/15/15 statements | Table-wise deletes make statement count constant; 96.7% fewer statements at 50 sessions. One-session case adds a quota cleanup statement. No latency claim. |
 | Invalid login, eight existing/missing username samples each | M3: 8 statements; medians 48.30/49.05 ms. Initial M4 controls: 11 statements; 37.32/36.96 ms | Atomic throttle UPSERT: 5 statements; medians 46.81/43.32 ms | 54.5% fewer statements than initial M4, 37.5% fewer than M3. Host timing is noisy; no latency speedup or constant-time proof claimed. |
-| Frontend gzip JavaScript | 80.43 kB | 82.74 kB | +2.31 kB for account/operations functionality; no new library. |
+| Frontend gzip JavaScript | 80.43 kB | 82.90 kB | +2.47 kB for account/operations functionality; no new library. |
 
 Reproduce the final workloads with `.venv/bin/python scripts/benchmark-usage.py`, `scripts/measure-erasure.py` and `scripts/benchmark-auth.py`. Baselines were captured before the corresponding change; scripts report only synthetic data. A subsequent usage read median of 0.318572 ms confirms ordinary measurement variation; the comparison above uses the first equivalent post-change run. Authentication retains the same expensive password hash on nonexistent-account failures.
 
@@ -112,3 +112,7 @@ At PR submission, GitHub Dependabot, CodeQL and secret-scanning open-alert count
 The first remote CI attempt failed before starting jobs: the PostgreSQL service container ID used the `job` context in job-level `env`, where that context is unavailable. It was moved to the Python test step's `env`, where it is supported by the [GitHub context availability contract](https://docs.github.com/en/actions/reference/workflows-and-actions/contexts#context-availability). The full required workflow was rerun on the corrected final head; no check was bypassed or disabled. Runtime source and test coverage were unchanged by this workflow-only correction.
 
 The next PostgreSQL run exposed a test false positive (297 passed, 1 failed, 1 skipped): a whole-JSON search for another account's numeric sentinel `999` also matched legitimate timestamp microseconds `799928`. The test now checks the exact exported usage list and foreign owner identifier, intentionally includes that timestamp, and verifies the other account's quota survives erasure. This strengthens the ownership assertion without changing application code or removing coverage. The corrected data-governance suite passed locally on PostgreSQL (7 passed, 3.55 s) and SQLite (7 passed, 2.33 s); the complete required remote suite is rerun on the final head.
+
+A valid PR review found that the first UI hardcoded 25 sessions per export page, so a legitimate account exceeding the byte/row limit could not reduce its request. The UI now provides bounded 25/10/5/1-session choices and preserves the last successful cursor after an oversized-page response. First-page and later-page recovery tests retain per-attempt password confirmation, clearing and no automatic retry. README and the governance runbook describe this behavior. Optimization review: explicit page sizing avoids repeated oversized serialization without speculative retries or new dependencies; no latency improvement is claimed. The review thread is resolved only after the correction and regression tests are complete.
+
+The page-size regressions failed before the UI correction and passed afterward. The final frontend suite passed 33 tests (3.79 s), TypeScript/Vite passed, and gzip JavaScript is 82.90 kB. This later browser recovery path was verified with controlled fetch responses; the earlier actual Chrome full workflow remains recorded above. No backend code changed.

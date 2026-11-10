@@ -16,6 +16,7 @@ export function Account({ auth, signedOut }: { auth: Authentication; signedOut: 
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [cursor, setCursor] = useState<string | null>(null);
+  const [exportPageSize, setExportPageSize] = useState(25);
 
   async function perform(action: () => Promise<void>) {
     if (busy) return;
@@ -26,7 +27,7 @@ export function Account({ auth, signedOut }: { auth: Authentication; signedOut: 
   }
   async function exportData(next: boolean) {
     await post("/auth/reauthenticate", { password });
-    const data = await post<AccountExport>("/auth/export", { limit: 25, ...(next && cursor ? { after_session_id: cursor } : {}) });
+    const data = await post<AccountExport>("/auth/export", { limit: exportPageSize, ...(next && cursor ? { after_session_id: cursor } : {}) });
     const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }));
     const anchor = document.createElement("a");
     anchor.href = url; anchor.download = `praxioj-export-${Date.now()}.json`;
@@ -60,6 +61,10 @@ export function Account({ auth, signedOut }: { auth: Authentication; signedOut: 
       })}>Change password and sign out everywhere</button>
       <h3>Export your data</h3>
       <p>Downloads contain private conversations and artifacts. Store them securely. Expired traces are omitted; large accounts use multiple pages.</p>
+      <label>Sessions per export page<select value={exportPageSize} onChange={event => setExportPageSize(Number(event.target.value))} disabled={busy}>
+        {[25, 10, 5, 1].map(size => <option key={size} value={size}>{size}</option>)}
+      </select></label>
+      <p className="small-note">If an export is too large, choose a smaller page and confirm your password to try again. Your next-page position is kept. If one session is still too large, ask the local operator to review the export limits.</p>
       <div className="account-actions"><button className="button secondary" disabled={busy || !password} onClick={() => void perform(() => exportData(false))}>Download export</button>
         {cursor ? <button className="button secondary" disabled={busy || !password} onClick={() => void perform(() => exportData(true))}>Download next page</button> : null}</div>
       <h3>Delete your account data</h3>

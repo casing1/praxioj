@@ -8,7 +8,7 @@ const usage = { resets_at: auth.expires_at, daily: { model_calls: 1, tool_calls:
   limits: { model_calls: 200, tool_calls: 400, token_allowance: 2000000 } }, active_sessions: 1, retained_sessions: 1, active_runs: 0,
   artifact_capacity_reserved_bytes: 1024, trace_capacity_reserved_bytes: 8192,
   limits: { active_sessions: 10, retained_sessions: 100, active_runs: 2, artifact_capacity_bytes: 100000, trace_capacity_bytes: 100000 } };
-function setup(handler: (path: string, init?: RequestInit) => Response) {
+function setup(handler: (path: string, init?: RequestInit) => Response | Promise<Response>) {
   window.history.replaceState(null, "", "#/account");
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = String(input);
@@ -21,6 +21,85 @@ function setup(handler: (path: string, init?: RequestInit) => Response) {
 }
 
 describe("account and private data", () => {
+  it("lets a rejected first export use a smaller page after fresh confirmation", async () => {
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:synthetic-export");
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
+    let releaseConfirmation: (() => void) | undefined;
+    let confirmations = 0;
+    let exports = 0;
+    const fetchMock = setup(path => {
+      if (path === "/api/auth/reauthenticate") {
+        confirmations += 1;
+        return confirmations === 1 ? new Promise<Response>(resolve => {
+          releaseConfirmation = () => resolve(json({ expires_at: auth.expires_at }));
+        }) : json({ expires_at: auth.expires_at });
+      }
+      exports += 1;
+      return exports === 1 ? json({ detail: "Export exceeds the row limit" }, 413) : json({ next_cursor: null, sessions: [] });
+    });
+    await screen.findByRole("heading", { name: "Account and data" });
+    const pageSize = screen.getByLabelText("Sessions per export page");
+    expect(pageSize).toHaveValue("25");
+    fireEvent.change(screen.getByLabelText("Current password"), { target: { value: "first-confirmation" } });
+    fireEvent.click(screen.getByRole("button", { name: "Download export" }));
+    await waitFor(() => expect(pageSize).toBeDisabled());
+    releaseConfirmation?.();
+    expect(await screen.findByRole("alert")).toHaveTextContent("Export exceeds the row limit");
+    expect(screen.getByLabelText("Current password")).toHaveValue("");
+    expect(pageSize).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Download export" })).toBeDisabled();
+    const writes = () => fetchMock.mock.calls.filter(([, init]) => init?.method === "POST");
+    expect(writes()).toHaveLength(2);
+    fireEvent.change(pageSize, { target: { value: "1" } });
+    expect(writes()).toHaveLength(2);
+    fireEvent.change(screen.getByLabelText("Current password"), { target: { value: "second-confirmation" } });
+    fireEvent.click(screen.getByRole("button", { name: "Download export" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("completes the export");
+    expect(writes().map(([path]) => path)).toEqual([
+      "/api/auth/reauthenticate", "/api/auth/export", "/api/auth/reauthenticate", "/api/auth/export",
+    ]);
+    expect(writes().filter(([path]) => path === "/api/auth/export").map(([, init]) => JSON.parse(String(init?.body))))
+      .toEqual([{ limit: 25 }, { limit: 1 }]);
+    expect(screen.getByLabelText("Current password")).toHaveValue("");
+    expect(screen.getByText(/If one session is still too large/)).toBeVisible();
+    vi.restoreAllMocks();
+  });
+
+  it("keeps the next-page cursor when a large page is rejected", async () => {
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:synthetic-export");
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
+    let exports = 0;
+    const fetchMock = setup(path => {
+      if (path === "/api/auth/reauthenticate") return json({ expires_at: auth.expires_at });
+      exports += 1;
+      return exports === 2 ? json({ detail: "Export exceeds the row limit" }, 413)
+        : json({ next_cursor: exports === 1 ? "session-cursor" : null, sessions: [] });
+    });
+    await screen.findByRole("heading", { name: "Account and data" });
+    const confirmAndClick = (name: string) => {
+      fireEvent.change(screen.getByLabelText("Current password"), { target: { value: "synthetic-password" } });
+      fireEvent.click(screen.getByRole("button", { name }));
+    };
+    confirmAndClick("Download export");
+    expect(await screen.findByRole("status")).toHaveTextContent("remaining sessions");
+    confirmAndClick("Download next page");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Export exceeds the row limit");
+    expect(screen.getByLabelText("Current password")).toHaveValue("");
+    expect(screen.getByRole("button", { name: "Download next page" })).toBeDisabled();
+    const requests = () => fetchMock.mock.calls.filter(([, init]) => init?.method === "POST");
+    expect(requests()).toHaveLength(4);
+    fireEvent.change(screen.getByLabelText("Sessions per export page"), { target: { value: "5" } });
+    expect(requests()).toHaveLength(4);
+    confirmAndClick("Download next page");
+    expect(await screen.findByRole("status")).toHaveTextContent("completes the export");
+    expect(requests().filter(([path]) => path === "/api/auth/export").map(([, init]) => JSON.parse(String(init?.body))))
+      .toEqual([{ limit: 25 }, { limit: 25, after_session_id: "session-cursor" }, { limit: 5, after_session_id: "session-cursor" }]);
+    expect(requests().filter(([path]) => path === "/api/auth/reauthenticate")).toHaveLength(3);
+    expect(screen.getByLabelText("Current password")).toHaveValue("");
+    expect(screen.queryByRole("button", { name: "Download next page" })).not.toBeInTheDocument();
+    vi.restoreAllMocks();
+  });
+
   it("requires password confirmation before downloading each export page", async () => {
     const create = vi.fn(() => "blob:synthetic-export");
     vi.spyOn(URL, "createObjectURL").mockImplementation(create);
