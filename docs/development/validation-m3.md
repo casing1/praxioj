@@ -1,6 +1,6 @@
 # Milestone 3 implementation and validation
 
-Validated on **2026-11-10**, after [Preflight PR #11](https://github.com/casing1/praxioj/pull/11) merged as `4ad6e02afecf05138d8d0446a7faff2a67be4212`. Work is isolated on `feat/milestone-3-secure-foundation`. GitHub delivery and current security-alert status are reported separately from these reproducible local results; source publication is not a production deployment.
+Validated on **2026-11-10**, after [Preflight PR #11](https://github.com/casing1/praxioj/pull/11) merged as `4ad6e02afecf05138d8d0446a7faff2a67be4212`. Implementation is reviewed in [Milestone 3 PR #12](https://github.com/casing1/praxioj/pull/12), from `feat/milestone-3-secure-foundation`. GitHub delivery and current security-alert status are reported separately from these reproducible local results; source publication is not a production deployment.
 
 ## Implemented behavior
 
@@ -29,10 +29,10 @@ Retention defaults to 30 days with a hard configurable ceiling of 90. Authors ca
 
 | Check | Actual result |
 | --- | --- |
-| Full PostgreSQL-backed Python suite | **246 passed, 1 skipped** in 49.73 seconds |
-| Default SQLite/offline suite | **238 passed, 9 skipped** in 35.13 seconds |
+| Full PostgreSQL-backed Python suite | **247 passed, 1 skipped** in 58.09 seconds |
+| Default SQLite/offline suite | **238 passed, 10 skipped** in 37.97 seconds |
 | Original PostgreSQL row-lock tests | Both passed; included in the full PostgreSQL run |
-| PostgreSQL-only coverage | Eight cases passed: original two, shared authentication limit, worker races/heartbeat, process fixture integration and process crash recovery |
+| PostgreSQL-only coverage | Nine cases passed: original two, shared authentication limit, worker races/heartbeat, process fixture integration, process crash recovery and concurrent recovery visibility |
 | Framework | **100 passed**, including 41 added M3 tests; original M1/M2 canonical manifest digests preserved |
 | Auth-specific PostgreSQL tests | **12 passed** |
 | Queue-specific PostgreSQL tests | **19 passed** |
@@ -47,13 +47,17 @@ Retention defaults to 30 days with a hard configurable ceiling of 90. Authors ca
 | Native Chrome UI against running stack | Register → select evidence-plan → Mock tool request/result → file/draft save → reload restores conversation/draft → submit → six criteria met, 100/100 and Trace verified |
 | Local OpenAI-compatible HTTP fixture with real worker process | Two provider requests with tool result/context, persisted file, submission and 100/100; no commercial endpoint |
 
-The default suite skips the eight PostgreSQL-only cases plus one explicitly opt-in live Provider case. The PostgreSQL suite skips only that live Provider case. No real API key was created or paid/external LLM request made.
+The default suite skips the nine PostgreSQL-only cases plus one explicitly opt-in live Provider case. The PostgreSQL suite skips only that live Provider case. No real API key was created or paid/external LLM request made.
 
 Worker failure tests start actual independent Python worker processes. Two processes competing for one job produce one successful claim. A worker killed during a slow local HTTP request is recovered after lease expiry by another worker; the fixture observes no automatic second request and usage remains unknown. Long calls retain ownership through heartbeats. Cancellation and old-worker completion cannot mutate a newer run. PostgreSQL migration tests include populated historical records and ORM/schema agreement.
 
 Security boundaries exercised include password hashing/verification, rotation/expiry/logout, Secure cookies on HTTPS loopback, missing/forged CSRF, foreign/missing authentication Origin, role escalation rejection, problem ownership, session/run/file/trace/evaluation IDOR, legacy token quarantine, tool input/path/permission restrictions, redaction, resource budgets, event tampering/suffix deletion, expired reads/writes, reviewer projection, account erasure and audit expiry. A final-submission-only event cannot earn the example's workspace-history points.
 
 The recorded runs emitted a Starlette TestClient deprecation warning for HTTPX. SQLite also emitted Python's legacy datetime-adapter warning. They did not fail tests. Native Windows behavior, long-duration production loads and actual commercial model inference remain unverified.
+
+The first PR CI run passed Frontend, Compose E2E and both CodeQL language jobs, but exposed a race in the persistence-failure regression test: its log assertion ran before the background worker finished reconciliation. A second recovery correctly skipped the worker-locked row, and the test read before that transaction committed. The test now waits for an explicitly controlled worker iteration to complete before forcing lease expiry. Its sensitive-log and recovery assertions remain intact; production behavior and required checks were not weakened. Final-head CI results are recorded on PR #12.
+
+The latest preflight alert read confirms all four original setuptools alerts fixed, with no dismissal or suppression. See [the alert report](preflight-validation.md#alert-reconciliation-follow-up) for remediation, timestamps and the earlier dependency-graph reconciliation delay.
 
 ## Reproduce
 

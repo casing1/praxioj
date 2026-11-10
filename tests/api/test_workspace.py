@@ -1,5 +1,6 @@
 """M2 application tests require no credentials and never call external providers."""
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 from hashlib import sha256
 import json
@@ -23,6 +24,7 @@ from praxioj_api.models import utcnow
 from praxioj_api.job_models import Job
 from praxioj_api.jobs import JobRepository
 from praxioj_api.runs import RunManager
+from praxioj_api.worker import Worker
 from praxioj_api.registry import register_manifest
 from praxioj_api.settings import Settings
 
@@ -324,22 +326,63 @@ def test_denied_tool_limit_preserves_tool_history_and_traces(app, client):
     assert client.get(f"/api/sessions/{sid}/usage").json()["tool_calls"] == 0
 
 
-def test_background_persistence_failure_never_logs_exception_content(app, client, session, monkeypatch, caplog):
+def test_background_persistence_failure_never_logs_exception_content(app, monkeypatch, caplog):
     original = RunManager.finish
     def failing_finish(*_args):
         raise RuntimeError("private-sql-params-and-credentials")
     monkeypatch.setattr(RunManager, "finish", failing_finish)
-    rid = start(client, session["id"], "hello")["id"]
-    deadline = time.monotonic() + 5
-    while "state_persistence_failed" not in caplog.text and time.monotonic() < deadline:
-        time.sleep(.01)
-    assert "state_persistence_failed" in caplog.text
-    assert "private-sql-params" not in caplog.text
-    monkeypatch.setattr(RunManager, "finish", original)
-    with app.state.session_factory.begin() as db:
-        db.get(Job, rid).lease_expires_at = utcnow() - timedelta(seconds=1)
-    JobRepository(app.state.session_factory).recover()
-    assert client.get(f"/api/runs/{rid}").json()["error"]["code"] == "lease_expired"
+    # Own one explicit worker invocation. A log message is not a completion
+    # barrier: a background worker may still be reconciling in another transaction.
+    with TestClient(app, base_url="http://localhost:8000") as client:
+        authenticate_client(client)
+        sid = new_session(client, problem="release-plan")
+        rid = start(client, sid, "hello")["id"]
+        assert asyncio.run(Worker(app).run_once())
+        assert "state_persistence_failed" in caplog.text
+        assert "private-sql-params" not in caplog.text
+        assert client.get(f"/api/runs/{rid}").json()["status"] == "running"
+        monkeypatch.setattr(RunManager, "finish", original)
+        with app.state.session_factory.begin() as db:
+            db.get(Job, rid).lease_expires_at = utcnow() - timedelta(seconds=1)
+        assert JobRepository(app.state.session_factory).recover() == 1
+        recovered = client.get(f"/api/runs/{rid}").json()
+        assert recovered["status"] == "failed" and recovered["error"]["code"] == "lease_expired"
+
+
+@pytest.mark.postgres
+def test_competing_recovery_skips_a_transition_until_its_owner_commits(app, monkeypatch):
+    if app.state.engine.dialect.name != "postgresql":
+        pytest.skip("PostgreSQL required to verify SKIP LOCKED recovery visibility")
+    from praxioj_api import jobs
+    entered, release = threading.Event(), threading.Event()
+    terminalize = jobs.terminalize
+    def paused_terminalize(*args, **kwargs):
+        entered.set()
+        assert release.wait(5), "Recovery transition was not released"
+        return terminalize(*args, **kwargs)
+    monkeypatch.setattr(jobs, "terminalize", paused_terminalize)
+    with TestClient(app, base_url="http://localhost:8000") as client:
+        authenticate_client(client)
+        sid = new_session(client, problem="release-plan")
+        rid = start(client, sid, "hello")["id"]
+        repository = JobRepository(app.state.session_factory)
+        assert repository.claim("recovery-test-worker") is not None
+        with app.state.session_factory.begin() as db:
+            db.get(Job, rid).lease_expires_at = utcnow() - timedelta(seconds=1)
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            transition = executor.submit(repository.recover)
+            try:
+                assert entered.wait(5), "Recovery did not acquire its locks"
+                # Another reconciler cannot claim completion of an in-flight
+                # transition: it skips the lock and readers see committed state.
+                assert repository.recover() == 0
+                pending = client.get(f"/api/runs/{rid}").json()
+                assert pending["status"] == "running" and pending["error"] is None
+            finally:
+                release.set()
+            assert transition.result(timeout=5) == 1
+        recovered = client.get(f"/api/runs/{rid}").json()
+        assert recovered["status"] == "failed" and recovered["error"]["code"] == "lease_expired"
 
 
 def test_elapsed_run_budget_stops_further_tool_mutations(app, client, monkeypatch):
