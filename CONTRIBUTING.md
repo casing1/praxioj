@@ -21,6 +21,16 @@ Keep changes proportional to the problem and preserve these boundaries:
 
 Run `make test` for the Python tests, frontend tests, and frontend build. If a relevant check cannot run, state that explicitly rather than reporting it as passing. For persistence, migrations, or locking changes, also run the PostgreSQL suite described in [local setup](docs/development/local-setup.md) against a disposable local database. A SQLite pass does not establish PostgreSQL transaction behavior. For API/UI integration changes, exercise the running stack and both `scripts/smoke.py` and `scripts/smoke-m2.py`; component tests alone do not verify the complete flow. Provider tests must use Mock or local fixtures by default; keep credentialed network tests opt-in and clearly skipped when unconfigured.
 
+## Mandatory development and optimization process
+
+All changes follow the [engineering workflow](docs/development/engineering-workflow.md). Coding agents should also follow the repository [AGENTS.md](AGENTS.md).
+
+Every development cycle has explicit preflight, design/baseline, implementation, verification, **optimization/hardening**, documentation, and PR delivery gates. Before merging a change, review the affected code for unnecessary database round trips, latency, memory/resource usage, security/reliability regressions, and maintainability. Measure before and after when an optimization claim is made. If no optimization is justified, record **"reviewed; no justified optimization"** with a concise reason rather than changing code for its own sake.
+
+**Review `README.md` in every PR.** Update it in the same PR whenever user-visible functionality, installation, commands, configuration, architecture summary, milestone status, or limitations change. If not updated, say why in the PR. Keep the relevant contracts, roadmap, security documentation, and validation reports consistent.
+
+Each completed milestone must include a dedicated post-implementation optimization/hardening pass and document its findings (including a justified no-op), measurement limitations, tests and risks in the milestone validation report. Do not claim performance gains without comparable baseline data.
+
 ## Submit a pull request
 
 Explain the problem, the resulting behavior, and how you verified it. Link a related issue when one exists. Include UI screenshots when they help a reviewer understand a visual change, and call out migrations, compatibility changes, or remaining limitations. Keep unrelated cleanup in a separate change.
