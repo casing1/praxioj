@@ -20,7 +20,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-test = ["pytest==9.2.0", "httpx==0.28.1"]
+test = ["pytest==9.2.0", "httpx==0.28.1", "setuptools==84.2.1"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

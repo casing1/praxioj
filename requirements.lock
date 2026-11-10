@@ -21,6 +21,7 @@ pydantic==2.14.3
 pydantic_core==2.50.4
 Pygments==2.21.0
 pytest==9.2.0
+setuptools==84.2.1
 SQLAlchemy==2.1.8
 starlette==1.10.0
 typing-inspection==0.4.5
