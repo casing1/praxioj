@@ -70,7 +70,7 @@ def digest_file(path):
 
 
 class PostgresBackup:
-    def __init__(self, database_url, *, container=None, timeout_seconds=120, expected_revision="0007_operations"):
+    def __init__(self, database_url, *, container=None, timeout_seconds=120, expected_revision="0008_judge_execution"):
         try:
             self.url = make_url(database_url)
         except Exception:
@@ -219,7 +219,7 @@ class PostgresBackup:
                          database=name, stdin=handle)
             with target.begin() as connection:
                 from .models import Base
-                from . import job_models, quota_models, retention_models  # noqa: F401 — register complete platform schema
+                from . import job_models, quota_models, retention_models, judge_models  # noqa: F401 — register complete platform schema
                 inspector = inspect(connection)
                 tables = set(inspector.get_table_names())
                 required = set(Base.metadata.tables) | {"alembic_version"}

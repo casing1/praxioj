@@ -56,6 +56,8 @@ def purge_expired(factory, settings, now=None, limit=100):
         ).order_by(SolveSession.created_at, SolveSession.id).limit(min(max(limit, 1), 1000))
             .with_for_update(skip_locked=True)))
         for session in sessions:
+            from .judge import expire_session_jobs
+            expire_session_jobs(db, session.id, now=now)
             count = db.execute(delete(TraceEvent).where(TraceEvent.session_id == session.id)).rowcount
             session.trace_purged_at = now
             if session.status == "active":
@@ -77,10 +79,14 @@ def erase_account(db, user):
     """Erase participant content atomically; retain an inactive pseudonymous FK tombstone."""
     from .job_models import Job
     from .quota_models import QuotaBucket
+    from .judge_models import JudgeJob
     sessions = list(db.scalars(select(SolveSession).where(SolveSession.user_id == user.id)
         .order_by(SolveSession.id).with_for_update()))
     if any(session.active_run_id for session in sessions):
         raise HTTPException(409, "Cancel active AI runs before deleting your account")
+    if db.scalar(select(JudgeJob.id).where(JudgeJob.owner_id == user.id,
+            JudgeJob.state.in_(("PENDING", "RUNNING"))).limit(1)):
+        raise HTTPException(409, "Cancel active synthetic Judge jobs before deleting your account")
     if not sessions and not user.is_active:
         return {"deleted_sessions": 0}
     # Fixed table-wise deletes replace one delete sequence per solve session.
@@ -106,11 +112,13 @@ def erase_account(db, user):
 
 
 def main():
+    from .backup import assert_not_restored_database
     from .database import make_engine, session_factory
     from .settings import Settings
     settings = Settings()
     engine = make_engine(settings.database_url)
     try:
+        assert_not_restored_database(engine)
         count = purge_expired(session_factory(engine), settings)
         print(f"Expired trace sessions purged: {count}")
     finally:

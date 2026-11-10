@@ -89,7 +89,29 @@ class Settings:
     account_trace_capacity_bytes: int = field(default_factory=lambda: int(os.getenv("PRAXIOJ_ACCOUNT_TRACE_CAPACITY_BYTES", "268435456")))
     system_trace_capacity_bytes: int = field(default_factory=lambda: int(os.getenv("PRAXIOJ_SYSTEM_TRACE_CAPACITY_BYTES", "2147483648")))
 
+    # Explicit synthetic test harness only; no executable sandbox is selectable.
+    judge_backend: str = field(default_factory=lambda: os.getenv("PRAXIOJ_JUDGE_BACKEND", "unavailable"))
+    judge_account_active_jobs: int = field(default_factory=lambda: int(os.getenv("PRAXIOJ_JUDGE_ACCOUNT_ACTIVE_JOBS", "2")))
+    judge_max_pending: int = field(default_factory=lambda: int(os.getenv("PRAXIOJ_JUDGE_MAX_PENDING", "16")))
+    judge_max_running: int = field(default_factory=lambda: int(os.getenv("PRAXIOJ_JUDGE_MAX_RUNNING", "2")))
+    judge_account_retained_jobs: int = field(default_factory=lambda: int(os.getenv("PRAXIOJ_JUDGE_ACCOUNT_RETAINED_JOBS", "32")))
+    judge_system_retained_jobs: int = field(default_factory=lambda: int(os.getenv("PRAXIOJ_JUDGE_SYSTEM_RETAINED_JOBS", "256")))
+    judge_account_reserved_output_bytes: int = field(default_factory=lambda: int(os.getenv("PRAXIOJ_JUDGE_ACCOUNT_RESERVED_OUTPUT_BYTES", "2097152")))
+    judge_system_reserved_output_bytes: int = field(default_factory=lambda: int(os.getenv("PRAXIOJ_JUDGE_SYSTEM_RESERVED_OUTPUT_BYTES", "16777216")))
+    judge_lease_seconds: float = field(default_factory=lambda: float(os.getenv("PRAXIOJ_JUDGE_LEASE_SECONDS", "15")))
+
     def __post_init__(self) -> None:
+        if self.judge_backend not in {"unavailable", "mock"}:
+            raise ValueError("Unsupported Judge backend; no executable runtime is available")
+        judge_bounds = {"judge_account_active_jobs": 16, "judge_max_pending": 256, "judge_max_running": 16,
+            "judge_account_retained_jobs": 256, "judge_system_retained_jobs": 4096,
+            "judge_account_reserved_output_bytes": 16 * 1024 * 1024,
+            "judge_system_reserved_output_bytes": 256 * 1024 * 1024}
+        if any(type(getattr(self, name)) is not int or not 1 <= getattr(self, name) <= maximum
+               for name, maximum in judge_bounds.items()):
+            raise ValueError("Judge capacity must use bounded positive integers")
+        if not math.isfinite(self.judge_lease_seconds) or not 1 <= self.judge_lease_seconds <= 60:
+            raise ValueError("Judge lease must be between 1 and 60 seconds")
         quota_names = ("account_active_sessions", "account_retained_sessions", "system_retained_sessions",
             "account_active_runs", "queue_max_pending", "worker_max_running", "call_token_reservation",
             "session_artifact_max_bytes", "session_trace_max_bytes", "session_trace_max_events",

@@ -94,6 +94,14 @@ jobs:
         run: python3 scripts/smoke-m3.py --base-url http://127.0.0.1:5173
       - name: Verify quotas, password confirmation, export, and synthetic account erasure
         run: python3 scripts/smoke-m4.py --base-url http://127.0.0.1:5173
+      - name: Verify Judge defaults to unavailable without backend dispatch
+        run: python3 scripts/smoke-m5.py --expect-unavailable
+      - name: Enable the explicitly synthetic Judge test harness
+        env:
+          PRAXIOJ_JUDGE_BACKEND: mock
+        run: docker compose up -d --wait api
+      - name: Verify synthetic Broker, result validation, replay and cancellation
+        run: python3 scripts/smoke-m5.py --restart-api
       - name: Stop the ephemeral CI stack
         if: always()
         run: docker compose down

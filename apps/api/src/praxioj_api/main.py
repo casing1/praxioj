@@ -36,6 +36,7 @@ from .retention import trace_expired, visible_trace
 from .backup import assert_not_restored_database
 from .data_governance import install_data_routes
 from .operations import install_operations_routes
+from .judge_routes import install_judge_routes
 from .quotas import admit_session, check_trace_admission, reserve_provider, settle_provider
 
 
@@ -60,7 +61,7 @@ def create_app(settings: Settings | None = None, *, database_url: str | None = N
             engine.dispose()
 
     app = FastAPI(
-        title="PraxiOJ — Local Development API", version="0.4.0", lifespan=lifespan,
+        title="PraxiOJ — Local Development API", version="0.5.0", lifespan=lifespan,
         description="Authenticated AI workspace with a PostgreSQL worker queue. Development preview; bind to loopback.",
         docs_url="/api/docs", redoc_url=None, openapi_url="/api/openapi.json",
     )
@@ -74,6 +75,7 @@ def create_app(settings: Settings | None = None, *, database_url: str | None = N
     install_auth_routes(app)
     install_review_routes(app)
     install_data_routes(app)
+    install_judge_routes(app)
     app.add_middleware(LocalDevelopmentGuard, settings=settings)
     install_operations_routes(app)
 
@@ -96,7 +98,7 @@ def create_app(settings: Settings | None = None, *, database_url: str | None = N
     def health(db: Db):
         db.execute(text("SELECT 1"))
         revision = db.execute(text("SELECT version_num FROM alembic_version")).scalar_one_or_none()
-        if revision != "0007_operations":
+        if revision != "0008_judge_execution":
             raise HTTPException(503, "Database migrations are required")
         return HealthResponse()
 
