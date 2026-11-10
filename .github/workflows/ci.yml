@@ -37,7 +37,6 @@ jobs:
     env:
       PRAXIOJ_RUN_LIVE_TESTS: "0"
       PRAXIOJ_TEST_DATABASE_URL: postgresql+psycopg://praxioj_ci:praxioj_ci@127.0.0.1:5432/praxioj_ci
-      PRAXIOJ_TEST_BACKUP_CONTAINER: ${{ job.services.postgres.id }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -50,6 +49,8 @@ jobs:
       - name: Install pinned Python dependencies
         run: python -m pip install -c requirements.lock -e packages/framework -e 'apps/api[test]'
       - name: Run offline Python tests, including PostgreSQL cases
+        env:
+          PRAXIOJ_TEST_BACKUP_CONTAINER: ${{ job.services.postgres.id }}
         run: python -m pytest -q
       - name: Check dependency consistency
         run: python -m pip check
