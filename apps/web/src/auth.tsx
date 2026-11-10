@@ -61,17 +61,24 @@ export function AuthenticationForm({ onSuccess, expired }: { onSuccess: (auth: A
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   return <section className="panel auth-panel">
     <span className="eyebrow">PRAXIOJ ACCOUNT</span>
     <h1>{register ? "Create an account" : "Sign in"}</h1>
     <p>Use a local development account to restore your sessions and work.</p>
     {expired ? <p role="status">Your sign-in expired. Sign in again to restore saved work.</p> : null}
     {error ? <ErrorNotice message={error} /> : null}
+    {notice ? <p role="status">{notice}</p> : null}
     <form onSubmit={async event => {
-      event.preventDefault(); if (busy) return; setBusy(true); setError(null);
+      event.preventDefault(); if (busy) return; setBusy(true); setError(null); setNotice(null);
       try {
-        const value = await post<Authentication>(register ? "/auth/register" : "/auth/login", { username, password });
-        setPassword(""); onSuccess(value);
+        if (register) {
+          const value = await post<{ message: string }>("/auth/register", { username, password });
+          setNotice(value.message); setRegister(false);
+        } else {
+          onSuccess(await post<Authentication>("/auth/login", { username, password }));
+        }
+        setPassword("");
       } catch (reason) { setPassword(""); setError((reason as Error).message); }
       finally { setBusy(false); }
     }}>
@@ -80,7 +87,7 @@ export function AuthenticationForm({ onSuccess, expired }: { onSuccess: (auth: A
       {register ? <p className="small-note">Choose a unique password of at least 12 characters. New accounts have the participant role.</p> : null}
       <button className="button primary" disabled={busy}>{busy ? "Please wait…" : register ? "Register" : "Sign in"}</button>
     </form>
-    <button type="button" className="button secondary" disabled={busy} onClick={() => { setRegister(!register); setPassword(""); setError(null); }}>{register ? "Use an existing account" : "Create an account"}</button>
+    <button type="button" className="button secondary" disabled={busy} onClick={() => { setRegister(!register); setPassword(""); setError(null); setNotice(null); }}>{register ? "Use an existing account" : "Create an account"}</button>
     <p className="small-note">Independent hobby project. This preview is restricted to local development.</p>
   </section>;
 }

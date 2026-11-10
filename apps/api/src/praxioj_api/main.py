@@ -1,5 +1,6 @@
 """Authenticated local development API; durable execution lives in a separate worker."""
 import asyncio
+import json
 from datetime import timedelta
 from contextlib import asynccontextmanager
 from hashlib import sha256
@@ -32,6 +33,10 @@ from .workspace import DatabaseWorkspaceStore
 from .workspace_routes import install_workspace_routes
 from .review_routes import install_review_routes
 from .retention import trace_expired, visible_trace
+from .backup import assert_not_restored_database
+from .data_governance import install_data_routes
+from .operations import install_operations_routes
+from .quotas import admit_session, check_trace_admission, reserve_provider, settle_provider
 
 
 def get_db(request: Request):
@@ -49,12 +54,13 @@ def create_app(settings: Settings | None = None, *, database_url: str | None = N
     @asynccontextmanager
     async def lifespan(_app):
         try:
+            assert_not_restored_database(engine)
             yield
         finally:
             engine.dispose()
 
     app = FastAPI(
-        title="PraxiOJ — Local Development API", version="0.3.0", lifespan=lifespan,
+        title="PraxiOJ — Local Development API", version="0.4.0", lifespan=lifespan,
         description="Authenticated AI workspace with a PostgreSQL worker queue. Development preview; bind to loopback.",
         docs_url="/api/docs", redoc_url=None, openapi_url="/api/openapi.json",
     )
@@ -67,7 +73,9 @@ def create_app(settings: Settings | None = None, *, database_url: str | None = N
     install_workspace_routes(app)
     install_auth_routes(app)
     install_review_routes(app)
+    install_data_routes(app)
     app.add_middleware(LocalDevelopmentGuard, settings=settings)
+    install_operations_routes(app)
 
     @app.exception_handler(RequestValidationError)
     async def invalid_request(_request, exc):
@@ -88,7 +96,7 @@ def create_app(settings: Settings | None = None, *, database_url: str | None = N
     def health(db: Db):
         db.execute(text("SELECT 1"))
         revision = db.execute(text("SELECT version_num FROM alembic_version")).scalar_one_or_none()
-        if revision != "0005_trace":
+        if revision != "0007_operations":
             raise HTTPException(503, "Database migrations are required")
         return HealthResponse()
 
@@ -122,6 +130,7 @@ def create_app(settings: Settings | None = None, *, database_url: str | None = N
             owner = require_user(db, request)
             manifest = ProblemManifest.model_validate(version.manifest)
             profile_id, model_config, snapshot = configure_session(settings, manifest, body.runtime_profile)
+            snapshot["resource_policy"] = admit_session(db, owner, manifest, settings)
             retention_days = min(manifest.trace_retention_days or settings.trace_retention_days, settings.trace_retention_max_days)
             session = SolveSession(user_id=owner.id, problem_version_id=version.id,
                                    model_configuration=model_config, runtime_profile=profile_id, profile_snapshot=snapshot,
@@ -140,7 +149,7 @@ def create_app(settings: Settings | None = None, *, database_url: str | None = N
                 "evaluator_id": manifest.evaluation.evaluator_id,
                 "evaluator_version": manifest.evaluation.evaluator_version,
                 "environment": {"mode": "local-development", "execution_backend": "unavailable",
-                                "framework_version": "0.1.0", "platform_version": "0.3.0", "python": platform.python_version()},
+                                "framework_version": "0.1.0", "platform_version": "0.4.0", "python": platform.python_version()},
                 "trace_retention_days": retention_days, "trace_expires_at": session.trace_expires_at.isoformat(),
             }, actor="participant", resource_ids={"problem_version_id": version.id})
             result = session_public(db, session)
@@ -153,6 +162,7 @@ def create_app(settings: Settings | None = None, *, database_url: str | None = N
 
     @app.post("/api/sessions/{session_id}/messages", response_model=ChatResult)
     def send_message(session_id: str, body: ContentRequest, request: Request, db: Db):
+        from .quotas import QuotaExceeded
         with db.begin():
             owner = require_user(db, request)
             session = owned_session(db, session_id, owner.id, lock=True)
@@ -160,6 +170,7 @@ def create_app(settings: Settings | None = None, *, database_url: str | None = N
             _version, manifest = manifest_for(db, session)
             if session.runtime_profile != "mock" or manifest.allowed_tools:
                 raise HTTPException(409, "Use the asynchronous /runs endpoint for this session")
+            check_trace_admission(db, session)
             code = budget_code(usage_for(db, session, manifest), manifest.resource_limits)
             if code:
                 raise HTTPException(429, code)
@@ -176,6 +187,9 @@ def create_app(settings: Settings | None = None, *, database_url: str | None = N
             call = ProviderCall(session_id=session.id)
             db.add(call)
             db.flush()
+            reserve_provider(db, session, call, settings,
+                input_bytes=len(json.dumps([m.model_dump(mode="json") for m in runtime_messages], ensure_ascii=False).encode()),
+                output_limit=ModelConfig.model_validate(session.model_configuration).max_output_tokens)
             try:
                 # Sync routes execute in FastAPI's thread pool. Only the deterministic
                 # local mock is wired here; future network providers need async orchestration.
@@ -187,24 +201,37 @@ def create_app(settings: Settings | None = None, *, database_url: str | None = N
                 ))
             except Exception:
                 call.status, call.error_code, call.finished_at = "failed", "provider_failed", utcnow()
-                append_trace(db, session, EventType.ERROR, {"stage": "ai_runtime", "code": "provider_failed"})
+                settle_provider(db, call)
+                append_trace(db, session, EventType.ERROR, {"stage": "ai_runtime", "code": "provider_failed"},
+                             resource_ids={"call_id": call.id}, terminal=True)
                 result = JSONResponse({"detail": "AI provider failed; the message was not stored"}, status_code=502)
             else:
                 call.status, call.finished_at = "completed", utcnow()
                 call.input_tokens, call.output_tokens, call.estimated = reply.usage.input_tokens, reply.usage.output_tokens, reply.usage.estimated
-                user_message = ConversationMessage(session_id=session.id, position=len(history) + 1,
-                                                   role="user", content=content)
-                assistant_message = ConversationMessage(session_id=session.id, position=len(history) + 2,
-                                                        role="assistant", content=scrub(reply.content, settings))
-                db.add_all([user_message, assistant_message])
-                session.user_message_count += 1
-                db.flush()
-                append_trace(db, session, EventType.USER_MESSAGE, {"content": content},
-                             actor="participant", resource_ids={"message_id": user_message.id})
-                append_trace(db, session, EventType.ASSISTANT_MESSAGE,
-                             {"content": assistant_message.content, "model": reply.model, "usage": reply.usage.model_dump(mode="json")},
-                             actor="assistant", resource_ids={"message_id": assistant_message.id})
-                result = {"user_message": message_public(user_message), "assistant_message": message_public(assistant_message)}
+                settle_provider(db, call)
+                try:
+                    # A response that cannot fit its Trace must not refund an
+                    # already performed call. Roll back only the message pair
+                    # and ordinary events, retaining provider/quota accounting.
+                    with db.begin_nested():
+                        user_message = ConversationMessage(session_id=session.id, position=len(history) + 1,
+                                                           role="user", content=content)
+                        assistant_message = ConversationMessage(session_id=session.id, position=len(history) + 2,
+                                                                role="assistant", content=scrub(reply.content, settings))
+                        db.add_all([user_message, assistant_message])
+                        session.user_message_count += 1
+                        db.flush()
+                        append_trace(db, session, EventType.USER_MESSAGE, {"content": content},
+                                     actor="participant", resource_ids={"message_id": user_message.id})
+                        append_trace(db, session, EventType.ASSISTANT_MESSAGE,
+                                     {"content": assistant_message.content, "model": reply.model, "usage": reply.usage.model_dump(mode="json")},
+                                     actor="assistant", resource_ids={"message_id": assistant_message.id})
+                    result = {"user_message": message_public(user_message), "assistant_message": message_public(assistant_message)}
+                except QuotaExceeded as error:
+                    call.error_code = error.code
+                    append_trace(db, session, EventType.ERROR, {"stage": "message_persistence", "code": error.code},
+                                 resource_ids={"call_id": call.id}, terminal=True)
+                    result = JSONResponse({"detail": error.code}, status_code=error.status_code, headers=error.headers)
         return result
 
     @app.get("/api/sessions/{session_id}/trace", response_model=list[TraceEnvelope])
@@ -233,9 +260,9 @@ def create_app(settings: Settings | None = None, *, database_url: str | None = N
             metadata = {"submission_id": submission.id, "sha256": submission.content_sha256,
                         "problem_id": version.problem_id, "problem_version": version.version}
             append_trace(db, session, EventType.ARTIFACT_UPDATED, metadata, actor="participant",
-                         resource_ids={"submission_id": submission.id})
+                         resource_ids={"submission_id": submission.id}, terminal=True)
             append_trace(db, session, EventType.SUBMISSION_CREATED, metadata, actor="participant",
-                         resource_ids={"submission_id": submission.id})
+                         resource_ids={"submission_id": submission.id}, terminal=True)
             try:
                 usage = usage_for(db, session, manifest)
                 result = request.app.state.evaluator.evaluate(EvaluationInput(
@@ -256,17 +283,17 @@ def create_app(settings: Settings | None = None, *, database_url: str | None = N
                     evaluator_id=manifest.evaluation.evaluator_id, evaluator_version=manifest.evaluation.evaluator_version,
                 )
             if result.status == "failed":
-                append_trace(db, session, EventType.ERROR, {"stage": "evaluation", "code": "evaluator_failed"})
+                append_trace(db, session, EventType.ERROR, {"stage": "evaluation", "code": "evaluator_failed"}, terminal=True)
             evaluation = Evaluation(id=str(result.id), submission_id=submission.id, result=result.model_dump(mode="json"))
             db.add(evaluation)
             db.flush()
             append_trace(db, session, EventType.EVALUATION_COMPLETED,
                          {"evaluation_id": evaluation.id, "status": result.status, "score": result.score,
                           "maximum_score": result.maximum_score, "evaluator_id": result.evaluator_id,
-                          "evaluator_version": result.evaluator_version}, resource_ids={"evaluation_id": evaluation.id})
+                          "evaluator_version": result.evaluator_version}, resource_ids={"evaluation_id": evaluation.id}, terminal=True)
             session.status = "submitted"
             session.draft = submission.content
-            append_trace(db, session, EventType.SESSION_ENDED, {"reason": "final_submission"})
+            append_trace(db, session, EventType.SESSION_ENDED, {"reason": "final_submission"}, terminal=True)
             receipt = {"submission_id": submission.id, "evaluation_id": evaluation.id}
         return receipt
 

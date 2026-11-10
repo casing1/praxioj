@@ -10,6 +10,7 @@ from .services import active, append_trace, manifest_for, messages_for, owned_se
 from .runs import TERMINAL, budget_code, profiles, scrub, usage_for, workspace_limits
 from .workspace import DatabaseWorkspaceStore
 from .jobs import cancel_locked, enqueue
+from .quotas import admit_run
 
 
 def install_workspace_routes(app):
@@ -53,6 +54,7 @@ def install_workspace_routes(app):
             code = budget_code(usage_for(db, session, manifest), limits)
             if code:
                 raise HTTPException(429, code)
+            admit_run(db, session, app.state.settings)
             run = WorkspaceRun(session_id=session.id, request_id=str(body.request_id), content_sha256=digest)
             db.add(run)
             db.flush()
@@ -133,6 +135,6 @@ def install_workspace_routes(app):
             session = owned_session(db, session_id, owner.id, lock=True)
             active(session)
             session.status = "ended"
-            append_trace(db, session, EventType.SESSION_STATE_CHANGED, {"session_status": "ended"}, actor="participant")
-            append_trace(db, session, EventType.SESSION_ENDED, {"reason": "participant_ended"}, actor="participant")
+            append_trace(db, session, EventType.SESSION_STATE_CHANGED, {"session_status": "ended"}, actor="participant", terminal=True)
+            append_trace(db, session, EventType.SESSION_ENDED, {"reason": "participant_ended"}, actor="participant", terminal=True)
             return session_public(db, session)

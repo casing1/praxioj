@@ -35,7 +35,9 @@ def main() -> None:
         with opener.open(req, timeout=15) as response:
             return json.load(response)
 
-    account = request("/auth/register", {"username": "smoke_" + uuid4().hex[:16], "password": "synthetic-" + uuid4().hex})
+    credentials = {"username": "smoke_" + uuid4().hex[:16], "password": "synthetic-" + uuid4().hex}
+    request("/auth/register", credentials)
+    account = request("/auth/login", credentials)
     csrf = account["csrf_token"]
     health = request("/health")
     assert health["status"] == "ok" and health["provider"] == "mock"
@@ -63,7 +65,9 @@ def main() -> None:
     assert request(f"/sessions/{session_id}")["status"] == "submitted"
 
     outsider = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
-    request("/auth/register", {"username": "outsider_" + uuid4().hex[:16], "password": "synthetic-" + uuid4().hex}, opener=outsider)
+    credentials = {"username": "outsider_" + uuid4().hex[:16], "password": "synthetic-" + uuid4().hex}
+    request("/auth/register", credentials, opener=outsider)
+    request("/auth/login", credentials, opener=outsider)
     for path in [f"/sessions/{session_id}", f"/sessions/{session_id}/trace", f'/evaluations/{submitted["evaluation_id"]}']:
         try:
             request(path, opener=outsider)

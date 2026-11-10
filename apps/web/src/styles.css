@@ -2226,3 +2226,10 @@ textarea:disabled {
 .auth-panel input, .auth-panel textarea { width: 100%; padding: .75rem; border: 1px solid #cbd5e1; border-radius: .5rem; background: white; color: #172d29; font: inherit; }
 .auth-panel pre { white-space: pre-wrap; overflow-wrap: anywhere; }
 .account-controls { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; font-size: .8rem; }
+.account-page { display: grid; gap: 1.5rem; max-width: 960px; }
+.account-section { padding: 1.5rem; }
+.account-section label { display: grid; gap: .4rem; margin: 1rem 0; }
+.account-section input[type="password"] { max-width: 32rem; padding: .65rem; }
+.account-section .confirmation { display: flex; align-items: center; gap: .7rem; }
+.account-section li { margin: 1rem 0; }
+.account-actions { display: flex; flex-wrap: wrap; gap: .75rem; }

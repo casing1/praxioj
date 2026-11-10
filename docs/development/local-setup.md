@@ -1,6 +1,6 @@
 # Local setup
 
-Run commands from the repository root. Milestone 3 adds accounts and a separate PostgreSQL worker, but remains a localhost development preview. Use the same browser host (`127.0.0.1` or `localhost`) throughout a session. No API key is needed for the default Mock provider.
+Run commands from the repository root. Milestone 4 adds quotas, worker operations and private data management, but remains a localhost development preview. Use the same browser host (`127.0.0.1` or `localhost`) throughout a session. No API key is needed for the default Mock provider.
 
 ## Docker Compose
 
@@ -11,7 +11,7 @@ docker compose config --quiet
 docker compose up --build -d --wait
 ```
 
-Open http://127.0.0.1:5173 and register an account using the UI. There is no default administrator or password. API documentation is at http://127.0.0.1:8000/api/docs; health is at http://127.0.0.1:8000/api/health.
+Open http://127.0.0.1:5173, register an account and explicitly sign in. Registration uses a generic acknowledgement without issuing a cookie. There is no default administrator or password. API documentation is at http://127.0.0.1:8000/api/docs; health is at http://127.0.0.1:8000/api/health.
 
 The API waits for PostgreSQL, applies migrations, and idempotently registers `release-plan`, `workspace-plan`, and `evidence-plan`. The worker starts after API health succeeds and polls the durable queue. Web serves the UI and proxies `/api`. API startup itself does not execute queued AI work. The worker uses the same image and server-side environment as the API; it publishes no port. Both run as an unprivileged container user.
 
@@ -21,6 +21,7 @@ docker compose logs --tail=100 api worker
 python3 scripts/smoke.py
 python3 scripts/smoke-m2.py
 python3 scripts/smoke-m3.py --base-url http://127.0.0.1:5173
+python3 scripts/smoke-m4.py --base-url http://127.0.0.1:5173
 ```
 
 Only API and web loopback ports are published. PostgreSQL shares an internal backend network with API/worker and is unpublished by default. API/worker also use the normal bridge network for configured provider connections. Outbound networking is not isolated; these containers are not an untrusted-code sandbox. Use `config --quiet`, not an expanded configuration dump that could reveal optional credentials.
@@ -97,6 +98,24 @@ Native role management uses the same database environment:
 
 See [authentication](authentication.md) for cookie/CSRF behavior, session expiry, rate limits, and legacy identity quarantine. `PRAXIOJ_COOKIE_SECURE=false` supports the documented localhost HTTP flow; HTTPS development can set it to true. This flag does not install TLS or make a public deployment supported.
 
+`make api` and the container startup script pass `--no-proxy-headers` to Uvicorn. Do not silently re-enable forwarded client-address trust. The local reverse proxy shares one transport-IP quota among its clients. A public trusted-proxy configuration is not provided. Uvicorn default access logs and nginx access logs are disabled; the API emits JSON request categories, methods, status and elapsed time without raw paths, query strings, IPs or bodies. Do not put credentials in URLs or enable verbose third-party HTTP/SQL diagnostics.
+
+Native API/worker database connections use a five-second connection/pool/row-lock wait, ten-second statement deadline and fifteen-second idle-transaction deadline. Caller `search_path` options are preserved. These bounds can reject a long operation or contended transaction with a safe error; they are not a hard real-time guarantee for an entire shutdown. Operator migrations and backup procedures have separate execution budgets.
+
+## Operations and private data
+
+Account and data offers own-session revocation, password changes, allowance views and confirmation-protected export/deletion. Export pages are bounded and expired traces are omitted. Password changes sign out every login. Administrators can inspect the Operations view after explicit role assignment. See [quota policy](../architecture/resource-quotas.md), [worker operations](../architecture/persistent-jobs.md), [data governance](data-governance.md), and [backup/restore](backup-restore.md).
+
+Run an independent bounded maintenance batch even when all workers are stopped:
+
+```sh
+make maintenance
+# Or with the Compose API container running:
+docker compose exec api python -m praxioj_api.maintenance
+```
+
+The command reconciles expired leases and cleans eligible traces, expired/revoked login records, old rate/quota buckets and stale worker records. Rerunning is safe after interruption. Scheduling it when no worker is available remains an operator responsibility. Restored databases are quarantined; the API, worker and supported operational entry points must not promote them to a serving environment.
+
 ## Validation
 
 With the Python dependencies installed:
@@ -114,10 +133,11 @@ The default suite uses isolated SQLite test storage where applicable. PostgreSQL
 ```sh
 PRAXIOJ_RUN_LIVE_TESTS=0 \
 PRAXIOJ_TEST_DATABASE_URL='postgresql+psycopg://praxioj:praxioj@127.0.0.1:5432/praxioj' \
+PRAXIOJ_TEST_BACKUP_CONTAINER=praxioj-db-1 \
 .venv/bin/python -m pytest
 ```
 
-Each API test creates a unique temporary schema, migrates it, and drops it afterward. The test database user needs schema-creation privileges; normal application tables are not truncated. Use a disposable local database, never a production connection. SQLite does not establish PostgreSQL locking guarantees.
+Each API test creates a unique temporary schema, migrates it, and drops it afterward. The backup test additionally creates and removes its own randomly named synthetic source/restore databases; the test role needs database-creation and backup inspection privileges. `PRAXIOJ_TEST_BACKUP_CONTAINER` selects matching PostgreSQL 18 tools in that local container. Without the explicit container/native-tool setup the real backup case skips. Normal application tables and the existing volume are not truncated. Use a disposable local database, never a production connection. SQLite does not establish PostgreSQL locking guarantees.
 
 Against the running API **and worker**, run the actual HTTP flows:
 
@@ -126,9 +146,10 @@ python3 scripts/smoke.py
 python3 scripts/smoke-m2.py
 python3 scripts/smoke-m3.py
 python3 scripts/smoke-m3.py --base-url http://127.0.0.1:5173
+python3 scripts/smoke-m4.py --base-url http://127.0.0.1:5173
 ```
 
-The scripts register synthetic accounts and leave their demonstration sessions/results in the local database. `smoke.py` preserves the foundation flow; `smoke-m2.py` checks tools, drafts, idempotency and ownership; `smoke-m3.py` uses the six-criterion `evidence-plan` rubric and verifies Trace integrity. The web-proxy variant includes nginx or Vite routing. A successful build alone does not verify this flow. M1/M2 validation documents remain historical records; current execution results belong in the M3 validation report.
+The M1–M3 scripts register synthetic accounts and leave their demonstration sessions/results in the local database. `smoke.py` preserves the foundation flow; `smoke-m2.py` checks tools, drafts, idempotency and ownership; `smoke-m3.py` uses the six-criterion `evidence-plan` rubric and verifies Trace integrity. `smoke-m4.py` adds account budgets, confirmation/export, session revocation, password rotation and erasure of only its newly created synthetic account. The web-proxy variant includes nginx or Vite routing. A successful build alone does not verify this flow. M1–M3 reports remain historical records; current results belong in [M4 validation](validation-m4.md).
 
 ## Troubleshooting
 

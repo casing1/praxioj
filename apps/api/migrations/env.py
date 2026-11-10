@@ -5,6 +5,7 @@ from sqlalchemy import engine_from_config, pool
 from praxioj_api.models import Base
 from praxioj_api import retention_models  # noqa: F401 — register operational audit metadata
 from praxioj_api import job_models  # Register separate queue metadata for schema checks.
+from praxioj_api import quota_models  # Register resource and worker operation metadata.
 
 config = context.config
 if os.getenv("DATABASE_URL"):

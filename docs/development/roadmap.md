@@ -6,11 +6,15 @@ M1 provides the independent Problem SDK, Runtime/Mock contracts, trace/evaluatio
 
 M3 adds Argon2id accounts and server sessions, CSRF and backend roles, immutable author publishing, a PostgreSQL job repository and separate workers, ownership leases/fencing, trace integrity/retention and deterministic evidence criteria. It preserves Mock and local fixture testing without credentials. See [M3 validation](validation-m3.md) and the [GitHub preflight report](preflight-validation.md) for actual checks and remaining limits.
 
-## Milestone 4 recommendations
+## Milestone 4 operational foundation
 
-1. Conduct a deployment-focused security review before any public hosting: TLS/proxy trust, registration abuse controls, global/account quotas, request budgets, monitoring and incident procedures. Add MFA, account recovery and verified identities where the product needs them.
-2. Expand worker operations: deployment migrations separated from API startup, queue fairness, worker health/metrics, maintenance scheduling independent of worker availability, operator recovery tools and long-running load/fault tests. Preserve explicit uncertain provider outcomes instead of transparent retries.
-3. Mature data governance: participant export/deletion UI, backup lifecycle, field-level minimization, encrypted storage/secret management, audited author review UX and externally anchored or signed evidence when justified. Distinguish retained evaluation results from expired underlying evidence.
+M4 implements shared authentication/API throttles, session and password management, confirmation-protected export/deletion, account/problem/system quotas, bounded trace/artifact capacity, worker registry/metrics/graceful drain, independent maintenance and synthetic PostgreSQL backup/restore validation. Restore databases are blocked from API/worker use. It documents a future isolated execution architecture without enabling arbitrary code. See [M4 validation and optimization evidence](validation-m4.md).
+
+## Milestone 5 recommendations
+
+1. Conduct a deployment-focused security review before any public hosting: verified TLS/proxy trust, multi-node load/abuse tests, identity recovery/MFA, incident response and secret management. Existing bounded localhost controls are not production certification.
+2. Expand worker operations: separate deployment migrations, schedule independent maintenance, collect structured metrics centrally if scale warrants it, and exercise sustained load, DB failover and recovery. Preserve explicit uncertain provider outcomes instead of transparent retries.
+3. Mature data governance: encrypted off-host backups with tested key recovery, durable external erasure-ledger replication and reviewed restore promotion, backup lifecycle automation, audited author review UX and externally anchored evidence when justified. Current restore quarantine intentionally blocks promotion.
 4. Extend author evaluation contracts only with observable, validated evidence. Build a separately isolated execution boundary before accepting external Python evaluators or contestant code. Current workers and containers do not provide that isolation.
 5. Add opt-in real provider/model conformance, usage reconciliation and price-version handling. Fixture success proves protocol behavior, not model quality, universal provider compatibility or exact billing. Streaming can follow a concrete usability need.
 

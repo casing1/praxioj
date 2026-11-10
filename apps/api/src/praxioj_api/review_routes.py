@@ -77,8 +77,9 @@ def install_review_routes(app):
 
     @app.post("/api/auth/delete")
     def delete_account(request: Request, response: Response):
+        from .security import require_recent_reauthentication
         with app.state.session_factory.begin() as db:
-            user = require_user(db, request)
+            user = require_recent_reauthentication(db, request)
             result = erase_account(db, user)
         for name in (app.state.settings.cookie_name, app.state.settings.csrf_cookie_name):
             response.delete_cookie(name, path="/", secure=app.state.settings.cookie_secure, httponly=True, samesite="strict")

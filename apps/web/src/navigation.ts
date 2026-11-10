@@ -6,6 +6,8 @@ export type Route =
   | { page: "session"; id: string }
   | { page: "evaluation"; id: string }
   | { page: "author" }
+  | { page: "account" }
+  | { page: "operations" }
   | { page: "missing" };
 
 function readRoute(): Route {
@@ -16,6 +18,8 @@ function readRoute(): Route {
   try {
     if (parts.length === 0) return { page: "problems" };
     if (parts.length === 1 && parts[0] === "author") return { page: "author" };
+    if (parts.length === 1 && parts[0] === "account") return { page: "account" };
+    if (parts.length === 1 && parts[0] === "operations") return { page: "operations" };
     if (parts[0] === "problems" && parts.length === 3)
       return {
         page: "problem",

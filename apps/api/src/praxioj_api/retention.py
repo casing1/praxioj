@@ -3,7 +3,7 @@ from datetime import timedelta, timezone
 from secrets import token_hex
 
 from fastapi import HTTPException
-from sqlalchemy import delete, or_, select
+from sqlalchemy import delete, or_, select, update
 
 from praxioj.tracing import verify_trace_chain
 from .models import (AuthSession, ConversationMessage, Evaluation, ProviderCall, SolveSession,
@@ -48,6 +48,7 @@ def visible_trace(db, session):
 def purge_expired(factory, settings, now=None, limit=100):
     """One bounded batch; skips live jobs whose terminalization must precede purge."""
     now = now or utcnow()
+    from .quota_models import TraceUsage
     with factory.begin() as db:
         sessions = list(db.scalars(select(SolveSession).where(
             SolveSession.trace_purged_at.is_(None), SolveSession.active_run_id.is_(None),
@@ -61,6 +62,8 @@ def purge_expired(factory, settings, now=None, limit=100):
                 session.status = "ended"
             audit(db, "trace_expired", resource_id=session.id, deleted_events=count,
                   last_sequence=session.next_sequence_number - 1, head_sha256=session.trace_head_sha256)
+        if sessions:
+            db.execute(update(TraceUsage).where(TraceUsage.session_id.in_([row.id for row in sessions])).values(bytes_used=0))
         expired_audit = list(db.scalars(select(AuditRecord.id)
             .where(AuditRecord.created_at < now - timedelta(days=settings.audit_retention_days))
             .order_by(AuditRecord.created_at, AuditRecord.id).limit(min(max(limit, 1), 1000))
@@ -73,19 +76,24 @@ def purge_expired(factory, settings, now=None, limit=100):
 def erase_account(db, user):
     """Erase participant content atomically; retain an inactive pseudonymous FK tombstone."""
     from .job_models import Job
+    from .quota_models import QuotaBucket
     sessions = list(db.scalars(select(SolveSession).where(SolveSession.user_id == user.id)
         .order_by(SolveSession.id).with_for_update()))
     if any(session.active_run_id for session in sessions):
         raise HTTPException(409, "Cancel active AI runs before deleting your account")
-    deleted_events = 0
-    for session in sessions:
-        submission_ids = select(Submission.id).where(Submission.session_id == session.id)
-        db.execute(delete(Evaluation).where(Evaluation.submission_id.in_(submission_ids)))
-        for model in (Submission, ProviderCall, Job, WorkspaceRun, ConversationMessage, WorkspaceFile):
-            db.execute(delete(model).where(model.session_id == session.id))
-        deleted_events += db.execute(delete(TraceEvent).where(TraceEvent.session_id == session.id)).rowcount
-        db.delete(session)
+    if not sessions and not user.is_active:
+        return {"deleted_sessions": 0}
+    # Fixed table-wise deletes replace one delete sequence per solve session.
+    # The owner lock and all session locks remain held until the caller commits.
+    session_ids = select(SolveSession.id).where(SolveSession.user_id == user.id)
+    submission_ids = select(Submission.id).where(Submission.session_id.in_(session_ids))
+    db.execute(delete(Evaluation).where(Evaluation.submission_id.in_(submission_ids)))
+    for model in (Submission, ProviderCall, Job, WorkspaceRun, ConversationMessage, WorkspaceFile):
+        db.execute(delete(model).where(model.session_id.in_(session_ids)))
+    deleted_events = db.execute(delete(TraceEvent).where(TraceEvent.session_id.in_(session_ids))).rowcount
+    db.execute(delete(SolveSession).where(SolveSession.user_id == user.id))
     db.execute(delete(AuthSession).where(AuthSession.user_id == user.id))
+    db.execute(delete(QuotaBucket).where(QuotaBucket.scope == "user", QuotaBucket.subject == user.id))
     user.username = None
     user.password_hash = None
     user.identity_token_hash = token_hex(32)

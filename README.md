@@ -9,7 +9,7 @@ PraxiOJ provides the infrastructure for authors to define problems and evaluate 
 
 The **Framework** is an independently installable Python library for problem manifests, AI provider adapters, traces, evaluation, and execution contracts. The **Platform** adds a FastAPI REST API, PostgreSQL persistence, and a React participant workspace. Framework code never imports the web server, ORM, or frontend.
 
-Milestone 3 adds account authentication, backend roles, a PostgreSQL job queue with a separate worker, bounded trace retention, hash verification, and evidence-based evaluation. It preserves the AI Workspace: persistent conversation and draft, asynchronous model runs, cancellation, permission-checked logical file tools, usage accounting, and ordered traces. The default Mock Provider needs no credentials. A server-configured OpenAI-compatible Chat Completions adapter can connect to hosted APIs or local LLM endpoints. Three sample problems demonstrate text and trace-based rubrics. There is no arbitrary code execution, terminal, security sandbox, or Judge Worker.
+Milestone 4 adds password confirmation and session management, shared request limits, account/problem/system budgets, worker operations, independent maintenance, private data export/deletion, and verified PostgreSQL backup/restore procedures. Restored databases are quarantined and cannot serve requests or execute jobs. It preserves M3 authentication, roles, the durable worker queue, trace retention/integrity, evidence evaluation, and the AI Workspace. The default Mock Provider needs no credentials. A server-configured OpenAI-compatible Chat Completions adapter can connect to hosted APIs or local LLM endpoints. Three sample problems demonstrate text and trace-based rubrics. Future execution isolation is designed, not enabled: there is no arbitrary code execution, terminal, security sandbox, or Judge Worker.
 
 > Development preview only. Keep it on localhost. Account sessions and role checks are implemented, but production hardening and public deployment support are not established. Do not enter secrets or sensitive personal data.
 
@@ -23,7 +23,9 @@ docker compose up --build -d --wait
 
 Open **http://127.0.0.1:5173**. API documentation is at **http://127.0.0.1:8000/api/docs**; health is at **http://127.0.0.1:8000/api/health**. Migrations and idempotent sample registration run before the API starts. Host ports bind to loopback only. PostgreSQL has no published port in this default setup. API/web use a bridge network for loopback port publishing; this does not provide a contestant execution sandbox.
 
-Register a participant account, then select **Build a release plan in your AI workspace**, choose Mock, and start a session. Ask **Please save a release plan in plan.txt** to exercise the deterministic tool flow. Inspect tool authorization/results and the saved file, load it into the final-answer draft, save, and submit. The result screen displays criterion scores, feedback, and recorded events. Mock replies are predefined demonstrations, not actual model inference. The original **Plan a reliable release** problem remains available. **Create a release plan with reviewable evidence** additionally evaluates the permitted tool and artifact history.
+Register a participant account, then sign in. Registration always returns the same acknowledgement; it does not disclose whether a username already exists. Select **Build a release plan in your AI workspace**, choose Mock, and start a session. Ask **Please save a release plan in plan.txt** to exercise the deterministic tool flow. Inspect tool authorization/results and the saved file, load it into the final-answer draft, save, and submit. The result screen displays criterion scores, feedback, and recorded events. Mock replies are predefined demonstrations, not actual model inference. The original **Plan a reliable release** problem remains available. **Create a release plan with reviewable evidence** additionally evaluates the permitted tool and artifact history.
+
+**Account and data** shows your sign-ins and allowances, changes your password, and exports or erases your private work after password confirmation. Password changes revoke all sign-ins. Large exports can use smaller pages while keeping their place after a size-limit error. Administrators have a separate **Operations** view; participant responses do not reveal other accounts or internal worker records. Native and container API commands disable forwarded-header trust. Behind the local proxy, its clients conservatively share the proxy's IP limit.
 
 See [AI Workspace setup](docs/development/ai-workspace.md) for provider configuration and a credential-free local HTTP fixture. No API key or paid call is needed for normal tests.
 
@@ -33,6 +35,19 @@ docker compose down
 ```
 
 The named database volume survives `down`. See [local setup](docs/development/local-setup.md) for native Python/Vite development, tests, and an optional loopback database port.
+
+## Resource and data operations
+
+The API and worker share the settings in [.env.example](.env.example). Defaults allow 10 active solve sessions and 2 concurrent runs per account, 100 queued jobs and 4 running workers' jobs system-wide. Daily call/tool budgets and conservative token reservations apply to accounts, problems and the system. Unknown provider usage remains unknown; reservations are not billing measurements. Logical artifact and trace capacity is reserved at session creation. See [quota policy](docs/architecture/resource-quotas.md) for exact limits and trade-offs.
+
+Maintenance can run without an AI worker:
+
+```sh
+docker compose exec api python -m praxioj_api.maintenance
+python3 scripts/smoke-m4.py --base-url http://127.0.0.1:5173
+```
+
+The M4 smoke creates and deletes only its own synthetic account. [Backup/restore](docs/development/backup-restore.md) uses PostgreSQL tools, private files outside the repository and fresh quarantined restore databases. Archives are not encrypted by this application: use a separately managed encrypted volume. Historical backups require an authoritative deletion ledger before any future recovery promotion; automatic promotion is deliberately unavailable. MFA, account recovery and public deployment remain unsupported.
 
 ## Use the Framework independently
 
@@ -73,7 +88,7 @@ examples/problems/      Minimal versioned sample package
 tests/                  Framework, API, migration, integration tests
 docs/                   Architecture, specifications, development guides
 docker/                 Same-origin web/API reverse proxy
-scripts/                Container API startup
+scripts/                Startup, smoke checks, and synthetic benchmarks
 ```
 
 ## Validate
@@ -83,13 +98,14 @@ make install
 make test
 ```
 
-Python tests use isolated databases and local HTTP fixtures; frontend tests exercise requests and interactions with mocked HTTP responses. External provider tests require explicit opt-in and otherwise skip. PostgreSQL integration and full-stack smoke checks are separate checks; see the [M3 validation record](docs/development/validation-m3.md), [Preflight report](docs/development/preflight-validation.md), historical [M2 validation record](docs/development/validation-m2.md) and historical [M1 validation](docs/development/validation.md). See [version choices](docs/development/versions.md) for dependency pins.
+Python tests use isolated databases and local HTTP fixtures; frontend tests exercise requests and interactions with mocked HTTP responses. External provider tests require explicit opt-in and otherwise skip. PostgreSQL integration, synthetic backup/restore and full-stack smoke checks are separate checks; see the [M4 validation record](docs/development/validation-m4.md), historical [M3 validation](docs/development/validation-m3.md), [Preflight report](docs/development/preflight-validation.md), historical [M2 validation](docs/development/validation-m2.md) and [M1 validation](docs/development/validation.md). See [version choices](docs/development/versions.md) for dependency pins.
 
 ## Design and next steps
 
 - [Architecture](docs/architecture/overview.md) and [module boundaries](docs/architecture/module-boundaries.md)
 - [Problem format](docs/specifications/problem-format.md), [trace events](docs/specifications/trace-events.md), [evaluation contract](docs/specifications/evaluation-contract.md)
 - [Runtime and tools](docs/specifications/runtime-and-tools.md), [security boundaries](SECURITY.md), and [roadmap](docs/development/roadmap.md)
+- [Authentication](docs/development/authentication.md), [worker operations](docs/architecture/persistent-jobs.md), [data governance](docs/development/data-governance.md), and [future sandbox architecture](docs/architecture/sandbox-architecture.md)
 - [Contributing](CONTRIBUTING.md)
 - [Engineering workflow](docs/development/engineering-workflow.md): PR writing, per-change README review, and mandatory optimization/hardening gates
 

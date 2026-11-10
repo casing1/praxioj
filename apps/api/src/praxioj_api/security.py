@@ -1,13 +1,19 @@
 """Account authentication, CSRF authorization, and localhost request boundaries."""
 from secrets import compare_digest
+from datetime import timedelta
+import asyncio
+import logging
 from fastapi import HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import SQLAlchemyError
 from starlette.datastructures import Headers
 from starlette.responses import JSONResponse
-from .auth import aware, token_digest
+from .auth import aware, consume_rate_bucket, token_digest
 from .models import AuthSession, User, utcnow
 from .settings import Settings
+
+logger = logging.getLogger("praxioj.internal.security")
 
 
 def current_user(db: Session, request: Request) -> User | None:
@@ -52,6 +58,27 @@ def require_role(db: Session, request: Request, *roles: str) -> User:
     return user
 
 
+def reauthenticated_until(request):
+    session = request.state.auth_session
+    if session.reauthenticated_at is None:
+        return None
+    return min(aware(session.expires_at), aware(session.reauthenticated_at) + timedelta(
+        seconds=request.app.state.settings.auth_reauthentication_seconds))
+
+
+def require_recent_reauthentication(db: Session, request: Request) -> User:
+    """A fresh password confirmation belongs to this server session only.
+
+    Login alone does not confirm a subsequent data export/deletion request.
+    require_user refreshes revocation after acquiring the account mutation lock.
+    """
+    user = require_user(db, request)
+    until = reauthenticated_until(request)
+    if until is None or until <= utcnow():
+        raise HTTPException(403, "Recent password confirmation required")
+    return user
+
+
 def can_manage_problem(user: User, problem) -> bool:
     return user.role == "administrator" or (user.role == "author" and problem.author_id == user.id)
 
@@ -70,6 +97,29 @@ class LocalDevelopmentGuard:
         hostname = host.split(":", 1)[0] if not host.startswith("[") else host.split("]", 1)[0] + "]"
         if hostname not in self.settings.allowed_hosts:
             return await JSONResponse({"detail": "Local development hosts only"}, status_code=400)(scope, receive, send)
+        # Health probes remain cheap and do not consume API capacity. All other
+        # paths share a persistent socket-peer budget, including rejected routes.
+        # No user/solve transaction exists yet, so this cannot invert its locks
+        # or require a second pooled connection while holding one.
+        rate_headers = {}
+        if scope.get("path") not in {"/api/health", "/health"}:
+            def reserve_request():
+                peer = scope.get("client")
+                address = peer[0] if peer else "unknown"
+                with scope["app"].state.session_factory.begin() as db:
+                    return consume_rate_bucket(db, token_digest("api-ip:" + address), self.settings.api_ip_limit,
+                                               self.settings.api_rate_window_seconds, utcnow())
+            try:
+                decision = await asyncio.to_thread(reserve_request)
+            except SQLAlchemyError:
+                logger.warning("api_request_rejected code=rate_store_unavailable")
+                return await JSONResponse({"detail": "Request admission temporarily unavailable"}, status_code=503,
+                    headers={"Cache-Control": "no-store", "Retry-After": "1"})(scope, receive, send)
+            rate_headers = decision.headers
+            if not decision.allowed:
+                logger.info("api_request_rejected code=rate_limited")
+                return await JSONResponse({"detail": "Too many API requests"}, status_code=429,
+                    headers={**rate_headers, "Cache-Control": "no-store"})(scope, receive, send)
         if scope["method"] not in {"GET", "HEAD", "OPTIONS"}:
             origin = headers.get("origin")
             if (origin is not None and origin not in self.settings.allowed_origins) or headers.get("sec-fetch-site") == "cross-site":
@@ -100,8 +150,10 @@ class LocalDevelopmentGuard:
             receive = receive_body
         async def private_send(message):
             if message["type"] == "http.response.start":
+                existing = {name.lower() for name, _ in message.get("headers", [])}
                 message["headers"] = list(message.get("headers", [])) + [
                     (b"cache-control", b"no-store"), (b"x-content-type-options", b"nosniff"),
-                ]
+                ] + [(name.lower().encode(), value.encode()) for name, value in rate_headers.items()
+                     if name.lower().encode() not in existing]
             await send(message)
         await self.app(scope, receive, private_send)
