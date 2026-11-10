@@ -1,0 +1,38 @@
+name: Bug report
+description: Report a reproducible PraxiOJ defect. Do not disclose security vulnerabilities here.
+title: "bug: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: "For sensitive security reports, see [SECURITY.md](../../SECURITY.md). Never include credentials or private submissions."
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should have happened?
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Steps, sample data, and the relevant problem/provider configuration (redact all secrets).
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version / commit
+  - type: textarea
+    id: checks
+    attributes:
+      label: Tests and diagnostics
+      description: Include relevant test commands and sanitized error output.
