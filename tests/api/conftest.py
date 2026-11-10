@@ -65,11 +65,14 @@ def client(app):
 
 def authenticate_client(client, username=None):
     """Use real registration and CSRF validation, never an authentication bypass."""
-    response = client.post("/api/auth/register", json={
+    credentials = {
         "username": username or "participant_" + uuid4().hex[:16],
         "password": "synthetic-test-passphrase-2026",
-    }, headers={"Origin": "http://localhost:8000"})
-    assert response.status_code == 201, response.text
+    }
+    response = client.post("/api/auth/register", json=credentials, headers={"Origin": "http://localhost:8000"})
+    assert response.status_code == 202, response.text
+    response = client.post("/api/auth/login", json=credentials, headers={"Origin": "http://localhost:8000"})
+    assert response.status_code == 200, response.text
     client.headers["X-CSRF-Token"] = response.json()["csrf_token"]
     return response.json()
 

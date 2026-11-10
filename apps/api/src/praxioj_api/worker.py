@@ -17,6 +17,7 @@ from .database import make_engine, session_factory
 from .jobs import JobRepository
 from .runs import RunManager
 from .settings import Settings
+from .operations import WorkerRegistry
 
 logger = logging.getLogger("praxioj.internal.worker")
 
@@ -27,7 +28,10 @@ class Worker:
         self.worker_id = worker_id or str(uuid4())
         if not 1 <= len(self.worker_id) <= 64:
             raise ValueError("Worker identifier must be between 1 and 64 characters")
-        self.repository = JobRepository(app.state.session_factory, lease_seconds=app.state.settings.worker_lease_seconds)
+        self.repository = JobRepository(app.state.session_factory, lease_seconds=app.state.settings.worker_lease_seconds,
+            max_running=app.state.settings.worker_max_running)
+        self.registry = WorkerRegistry(app.state.session_factory, self.worker_id)
+        self._last_registry = None
         self.stop = asyncio.Event()
         self._last_retention = None
 
@@ -36,6 +40,7 @@ class Worker:
             await asyncio.sleep(self.app.state.settings.worker_heartbeat_seconds)
             try:
                 alive = await asyncio.to_thread(self.repository.heartbeat, lease)
+                await asyncio.to_thread(self.registry.touch, "DRAINING" if self.stop.is_set() else "BUSY", lease.run_id)
             except Exception:
                 # Connection/SQL text may contain credentials; log only a safe code.
                 logger.warning("worker_failure code=heartbeat_unavailable run_id=%s", lease.run_id)
@@ -45,15 +50,27 @@ class Worker:
                 return
 
     async def run_once(self):
+        from .backup import assert_not_restored_database
+        await asyncio.to_thread(assert_not_restored_database, self.app.state.engine)
+        if self.stop.is_set():
+            return False
         # Each transaction is short; provider waits never retain a connection.
-        await asyncio.to_thread(self.repository.recover)
         if self._last_retention is None or monotonic() - self._last_retention >= 60:
-            from .retention import purge_expired
-            await asyncio.to_thread(purge_expired, self.app.state.session_factory, self.app.state.settings)
+            from .maintenance import run_maintenance
+            results = await asyncio.to_thread(run_maintenance, self.app.state.session_factory, self.app.state.settings)
+            recovered = results["recovered_jobs"]
             self._last_retention = monotonic()
+        else:
+            recovered = await asyncio.to_thread(self.repository.recover)
+        if recovered or self._last_registry is None or monotonic() - self._last_registry >= self.app.state.settings.worker_heartbeat_seconds:
+            await asyncio.to_thread(self.registry.touch, "IDLE", recovered=recovered)
+            self._last_registry = monotonic()
+        if self.stop.is_set():
+            return False
         lease = await asyncio.to_thread(self.repository.claim, self.worker_id)
         if lease is None:
             return False
+        await asyncio.to_thread(self.registry.touch, "BUSY", lease.run_id)
         executor = RunManager(self.app, lease)
         execution = asyncio.create_task(executor.execute(lease.run_id))
         heartbeat = asyncio.create_task(self._heartbeat(lease, execution))
@@ -61,7 +78,12 @@ class Worker:
         try:
             done, _ = await asyncio.wait({execution, stopping}, return_when=asyncio.FIRST_COMPLETED)
             if stopping in done and not execution.done():
-                execution.cancel()
+                await asyncio.to_thread(self.registry.touch, "DRAINING", lease.run_id)
+                # Continue heartbeats during a bounded drain. No new job is claimed.
+                try:
+                    await asyncio.wait_for(asyncio.shield(execution), self.app.state.settings.worker_shutdown_seconds)
+                except TimeoutError:
+                    execution.cancel()
             await execution
         except asyncio.CancelledError:
             execution.cancel()
@@ -75,25 +97,34 @@ class Worker:
             heartbeat.cancel()
             stopping.cancel()
             await asyncio.gather(heartbeat, stopping, return_exceptions=True)
+        await asyncio.to_thread(self.registry.touch, "STOPPED" if self.stop.is_set() else "IDLE", lease.run_id, finished=True)
         await asyncio.to_thread(self.repository.recover)
         return True
 
     async def serve(self):
-        while not self.stop.is_set():
+        try:
+            while not self.stop.is_set():
+                try:
+                    worked = await self.run_once()
+                except Exception:
+                    logger.error("worker_failure code=queue_unavailable")
+                    worked = False
+                if not worked:
+                    with suppress(TimeoutError):
+                        await asyncio.wait_for(self.stop.wait(), timeout=self.app.state.settings.worker_poll_seconds)
+        finally:
             try:
-                worked = await self.run_once()
+                await asyncio.to_thread(self.registry.touch, "STOPPED")
             except Exception:
-                logger.error("worker_failure code=queue_unavailable")
-                worked = False
-            if not worked:
-                with suppress(TimeoutError):
-                    await asyncio.wait_for(self.stop.wait(), timeout=self.app.state.settings.worker_poll_seconds)
+                logger.error("worker_failure code=registry_unavailable")
 
 
 async def run_worker(settings, *, once=False):
     engine = make_engine(settings.database_url)
     app = SimpleNamespace(state=SimpleNamespace(settings=settings, engine=engine,
         session_factory=session_factory(engine), runtime=AIRuntime(MockProvider())))
+    from .backup import assert_not_restored_database
+    assert_not_restored_database(engine)
     worker = Worker(app)
     loop = asyncio.get_running_loop()
     for name in (signal.SIGINT, signal.SIGTERM):
@@ -102,6 +133,7 @@ async def run_worker(settings, *, once=False):
     try:
         if once:
             await worker.run_once()
+            await asyncio.to_thread(worker.registry.touch, "STOPPED")
         else:
             await worker.serve()
     finally:

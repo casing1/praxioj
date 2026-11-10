@@ -2,13 +2,17 @@
 from hashlib import sha256
 from sqlalchemy import select
 from praxioj.tools import WorkspaceDocument, WorkspaceLimits, validate_workspace_path
-from .models import WorkspaceFile
+from .models import SolveSession, WorkspaceFile
 
 
 class DatabaseWorkspaceStore:
     """Caller must hold the session row lock for writes and quota checks."""
     def __init__(self, db, session_id: str, limits: WorkspaceLimits):
         self.db, self.session_id, self.limits = db, session_id, limits
+        session = db.get(SolveSession, session_id)
+        cap = session.profile_snapshot.get("resource_policy", {}).get("artifact_max_bytes") if session else None
+        if cap is not None:
+            self.limits = limits.model_copy(update={"max_workspace_bytes": min(cap, limits.max_workspace_bytes)})
 
     def _rows(self):
         return list(self.db.scalars(select(WorkspaceFile).where(

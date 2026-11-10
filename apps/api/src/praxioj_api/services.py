@@ -66,7 +66,7 @@ def session_public(db: Session, session: SolveSession) -> dict:
 
 def append_trace(db: Session, session: SolveSession, event_type: EventType, payload: dict,
                  *, actor: str = "system", resource_ids: dict | None = None, correlation_id: str | None = None,
-                 parent_event_id: str | None = None) -> TraceEnvelope:
+                 parent_event_id: str | None = None, terminal: bool = False) -> TraceEnvelope:
     # The caller locks SolveSession before any mutation. PostgreSQL serializes writers;
     # the database unique constraint is an independent final check against duplicates.
     event = TraceEnvelope(
@@ -78,6 +78,8 @@ def append_trace(db: Session, session: SolveSession, event_type: EventType, payl
     if session.trace_purged_at is not None:
         raise ValueError("Cannot append to a purged session trace")
     event = seal_trace_event(event, session.trace_head_sha256)
+    from .quotas import charge_trace
+    charge_trace(db, session, event.model_dump(mode="json"), terminal=terminal)
     session.trace_head_sha256 = event.event_hash
     session.next_sequence_number += 1
     db.add(TraceEvent(

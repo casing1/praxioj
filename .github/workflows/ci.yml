@@ -37,6 +37,7 @@ jobs:
     env:
       PRAXIOJ_RUN_LIVE_TESTS: "0"
       PRAXIOJ_TEST_DATABASE_URL: postgresql+psycopg://praxioj_ci:praxioj_ci@127.0.0.1:5432/praxioj_ci
+      PRAXIOJ_TEST_BACKUP_CONTAINER: ${{ job.services.postgres.id }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -90,6 +91,8 @@ jobs:
         run: docker compose up --build -d --wait
       - name: Verify account, worker, tools, trace integrity, and evidence evaluation
         run: python3 scripts/smoke-m3.py --base-url http://127.0.0.1:5173
+      - name: Verify quotas, password confirmation, export, and synthetic account erasure
+        run: python3 scripts/smoke-m4.py --base-url http://127.0.0.1:5173
       - name: Stop the ephemeral CI stack
         if: always()
         run: docker compose down

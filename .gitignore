@@ -17,4 +17,7 @@ coverage/
 *.db
 *.log
 artifacts/
+backups/
+*.dump
+*.pgdump
 .DS_Store

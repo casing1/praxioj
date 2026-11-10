@@ -10,7 +10,7 @@ import logging
 from time import monotonic
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import case, func, or_, select
 
 from praxioj.runtime import (AIRuntime, Message, MockProvider, ModelConfig,
     OpenAICompatibleProvider, ProviderCapabilities, ProviderError, RuntimeContext, ToolCall)
@@ -20,6 +20,7 @@ from .models import ConversationMessage, ProviderCall, SolveSession, WorkspaceRu
 from .services import append_trace, manifest_for, messages_for
 from .workspace import DatabaseWorkspaceStore
 from .jobs import LeaseLost, require_lease, terminalize
+from .quotas import QuotaExceeded, check_trace_admission, reserve_provider, reserve_tool, settle_provider
 
 logger = logging.getLogger("praxioj.internal.runtime")
 TERMINAL = {"completed", "failed", "cancelled"}
@@ -47,7 +48,14 @@ ERROR_MESSAGES = {
 
 
 def safe_error(code):
-    return {"code": code, "message": ERROR_MESSAGES.get(code, "The AI runtime could not complete this run.")}
+    if code == "trace_storage_limit":
+        message = "This session's trace storage limit has been reached. Existing work can still be submitted or closed."
+    elif code in {f"{scope}_{kind}" for scope in ("user", "problem", "system")
+                  for kind in ("model_call_limit", "tool_call_limit", "token_allowance")}:
+        message = "The daily resource policy prevents another call. Unknown usage remains reserved until the UTC day resets."
+    else:
+        message = ERROR_MESSAGES.get(code, "The AI runtime could not complete this run.")
+    return {"code": code, "message": message}
 
 
 def scrub(value, settings):
@@ -105,18 +113,21 @@ def configure_session(settings, manifest, requested):
 
 
 def usage_for(db, session, manifest):
-    calls = list(db.scalars(select(ProviderCall).where(ProviderCall.session_id == session.id)))
-    runs = list(db.scalars(select(WorkspaceRun).where(WorkspaceRun.session_id == session.id)))
-    complete = all(c.input_tokens is not None and c.output_tokens is not None for c in calls)
-    incoming = sum(c.input_tokens or 0 for c in calls)
-    outgoing = sum(c.output_tokens or 0 for c in calls)
+    calls, incoming, outgoing, incomplete, estimated = db.execute(select(func.count(ProviderCall.id),
+        func.coalesce(func.sum(ProviderCall.input_tokens), 0), func.coalesce(func.sum(ProviderCall.output_tokens), 0),
+        func.coalesce(func.sum(case((or_(ProviderCall.input_tokens.is_(None), ProviderCall.output_tokens.is_(None)), 1), else_=0)), 0),
+        func.coalesce(func.sum(case((ProviderCall.estimated.is_(True), 1), else_=0)), 0))
+        .where(ProviderCall.session_id == session.id)).one()
+    tool_calls = db.scalar(select(func.coalesce(func.sum(func.json_array_length(WorkspaceRun.tool_calls)), 0))
+        .where(WorkspaceRun.session_id == session.id))
+    complete = incomplete == 0
     prices = session.profile_snapshot.get("pricing", {})
     pin, pout = prices.get("input_per_million"), prices.get("output_per_million")
     configured = pin is not None or pout is not None
     cost = ((incoming * (pin or 0) + outgoing * (pout or 0)) / 1_000_000) if configured else None
-    return {"model_calls": len(calls), "tool_calls": sum(len(r.tool_calls) for r in runs),
+    return {"model_calls": calls, "tool_calls": tool_calls,
             "input_tokens": incoming, "output_tokens": outgoing, "usage_complete": complete,
-            "estimated": any(c.estimated for c in calls), "cost_estimate": cost,
+            "estimated": estimated > 0, "cost_estimate": cost,
             "currency": prices.get("currency") if configured else None,
             "cost_estimate_complete": configured and complete and pin is not None and pout is not None,
             "limits": manifest.resource_limits.model_dump(mode="json")}
@@ -140,7 +151,8 @@ def finish_locked(db, session, run, status, code=None, provider_details=None):
         call.status, call.error_code, call.finished_at = "failed", code, utcnow()
         append_trace(db, session, EventType.PROVIDER_CALL_COMPLETED,
             {"status": "failed", "code": code, "usage": {"input_tokens": None, "output_tokens": None}, **provider_details},
-            resource_ids={"run_id": run.id, "provider_call_id": call.id}, correlation_id=run.id)
+            resource_ids={"run_id": run.id, "provider_call_id": call.id}, correlation_id=run.id, terminal=True)
+        settle_provider(db, call)
     # A stopped tool loop must not leave unmatched tool requests in history.
     history = messages_for(db, session.id)
     pending = {}
@@ -155,15 +167,15 @@ def finish_locked(db, session, run, status, code=None, provider_details=None):
         refs = {"run_id": run.id, "tool_call_id": tool["id"]}
         requested = append_trace(db, session, EventType.TOOL_CALL_REQUESTED,
             {"name": tool["name"], "arguments": tool["arguments"]}, actor="assistant",
-            resource_ids=refs, correlation_id=run.id)
+            resource_ids=refs, correlation_id=run.id, terminal=True)
         authorized = append_trace(db, session, EventType.TOOL_CALL_AUTHORIZED,
             {"allowed": False, "code": code or status,
              "message": "The run stopped before this tool could execute."},
-            resource_ids=refs, correlation_id=run.id, parent_event_id=str(requested.event_id))
+            resource_ids=refs, correlation_id=run.id, parent_event_id=str(requested.event_id), terminal=True)
         result = {"call_id": tool["id"], "status": "denied",
                   "content": {"code": code or status, "executed": False}}
         append_trace(db, session, EventType.TOOL_CALL_COMPLETED, result,
-            resource_ids=refs, correlation_id=run.id, parent_event_id=str(authorized.event_id))
+            resource_ids=refs, correlation_id=run.id, parent_event_id=str(authorized.event_id), terminal=True)
         db.add(ConversationMessage(session_id=session.id, position=next_position,
             role="tool", tool_call_id=tool["id"], content=json.dumps(result)))
         next_position += 1
@@ -172,10 +184,10 @@ def finish_locked(db, session, run, status, code=None, provider_details=None):
         session.active_run_id = None
     if code:
         append_trace(db, session, EventType.ERROR, {"stage": "ai_runtime", **safe_error(code)},
-                     resource_ids={"run_id": run.id}, correlation_id=run.id)
+                     resource_ids={"run_id": run.id}, correlation_id=run.id, terminal=True)
     append_trace(db, session, EventType.SESSION_STATE_CHANGED,
                  {"run_status": status, "session_status": session.status},
-                 resource_ids={"run_id": run.id}, correlation_id=run.id)
+                 resource_ids={"run_id": run.id}, correlation_id=run.id, terminal=True)
     if code:
         logger.warning("runtime_failure code=%s run_id=%s http_status=%s", code, run.id, provider_details.get("http_status"))
 
@@ -231,6 +243,8 @@ class RunManager:
             self.finish(run_id, "failed", code, {"http_status": status, "retryable": exc.retryable is True})
         except RunFailure as exc:
             self.finish(run_id, "failed", exc.code)
+        except QuotaExceeded as exc:
+            self.finish(run_id, "failed", exc.code)
         except Exception:
             self.finish(run_id, "failed", "runtime_failed")
 
@@ -242,6 +256,7 @@ class RunManager:
                 if run.cancel_requested:
                     raise asyncio.CancelledError()
                 _, manifest = manifest_for(db, session)
+                check_trace_admission(db, session)
                 limits = manifest.resource_limits
                 code = budget_code(usage_for(db, session, manifest), limits)
                 if code:
@@ -257,6 +272,9 @@ class RunManager:
                 db.add(call)
                 db.flush()
                 call_id = call.id
+                reserve_provider(db, session, call, self.app.state.settings,
+                    input_bytes=len(json.dumps([m.model_dump(mode="json") for m in history], ensure_ascii=False).encode()),
+                    output_limit=model.max_output_tokens)
                 started = append_trace(db, session, EventType.PROVIDER_CALL_STARTED,
                     {"provider": model.provider, "model": model.model, "status": "started"},
                     resource_ids={"run_id": run.id, "provider_call_id": call_id}, correlation_id=run.id)
@@ -283,11 +301,12 @@ class RunManager:
                 call.status, call.finished_at = "completed", utcnow()
                 call.input_tokens, call.output_tokens = reply.usage.input_tokens, reply.usage.output_tokens
                 call.estimated, call.provider_request_id = reply.usage.estimated, payload.get("provider_request_id")
+                settle_provider(db, call)
                 event = append_trace(db, session, EventType.PROVIDER_CALL_COMPLETED,
                     {"status": "completed", "model": payload["model"], "usage": reply.usage.model_dump(mode="json"),
                      "provider_request_id": call.provider_request_id, "finish_reason": payload.get("finish_reason")},
                     resource_ids={"run_id": run.id, "provider_call_id": call.id}, correlation_id=run.id,
-                    parent_event_id=started_id)
+                    parent_event_id=started_id, terminal=True)
                 completed_id = str(event.event_id)
             with self.app.state.session_factory.begin() as db:
                 session, run = self._locked(db, run_id)
@@ -316,6 +335,7 @@ class RunManager:
                         raise asyncio.CancelledError()
                     if usage_for(db, session, manifest)["tool_calls"] >= limits.max_tool_calls:
                         raise RunFailure("tool_call_limit")
+                    reserve_tool(db, session, settings)
                     call = ToolCall.model_validate(item)
                     run.tool_calls = [*run.tool_calls, call.id]
                     refs = {"run_id": run.id, "provider_call_id": call_id, "tool_call_id": call.id}

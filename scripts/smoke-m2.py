@@ -42,7 +42,9 @@ def main() -> None:
         with opener.open(req, timeout=10) as response:
             return json.load(response)
 
-    account = request("/auth/register", {"username": "smoke_" + uuid4().hex[:16], "password": "synthetic-" + uuid4().hex})
+    credentials = {"username": "smoke_" + uuid4().hex[:16], "password": "synthetic-" + uuid4().hex}
+    request("/auth/register", credentials)
+    account = request("/auth/login", credentials)
     csrf = account["csrf_token"]
     options = request("/runtime/options")
     assert args.profile in {item["id"] for item in options["profiles"]}, "Requested server profile not configured"
@@ -81,7 +83,9 @@ def main() -> None:
     for event in ["PROVIDER_CALL_STARTED", "PROVIDER_CALL_COMPLETED", "TOOL_CALL_REQUESTED", "TOOL_CALL_AUTHORIZED", "TOOL_CALL_COMPLETED", "ARTIFACT_UPDATED", "SESSION_STATE_CHANGED", "EVALUATION_COMPLETED"]:
         assert event in types, event
     outsider = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
-    request("/auth/register", {"username": "outsider_" + uuid4().hex[:16], "password": "synthetic-" + uuid4().hex}, opener=outsider)
+    credentials = {"username": "outsider_" + uuid4().hex[:16], "password": "synthetic-" + uuid4().hex}
+    request("/auth/register", credentials, opener=outsider)
+    request("/auth/login", credentials, opener=outsider)
     for path in [f"/runs/{run['id']}", f"/sessions/{sid}/usage", f"/sessions/{sid}/files", f"/sessions/{sid}/trace"]:
         try:
             request(path, opener=outsider)

@@ -68,6 +68,8 @@ def test_login_rotation_logout_and_expiry(app):
 def test_cookie_flags_and_csrf_origin_boundaries(app):
     with raw_client(app) as browser:
         response = browser.post("/api/auth/register", json={"username": "alice", "password": PASSWORD})
+        assert response.status_code == 202 and not response.headers.get_list("set-cookie")
+        response = browser.post("/api/auth/login", json={"username": "alice", "password": PASSWORD})
         cookie_headers = response.headers.get_list("set-cookie")
         assert len(cookie_headers) == 2
         for cookie in cookie_headers:
@@ -116,7 +118,7 @@ def test_old_development_identity_cannot_authenticate_or_claim_account(app):
 def test_rate_limit_persists_across_clients_and_ignores_forwarded_headers(app):
     with raw_client(app) as browser:
         authenticate_client(browser, "alice")
-        for index in range(9):
+        for index in range(8):
             response = browser.post("/api/auth/login", json={"username": "alice", "password": PASSWORD + "bad"},
                                     headers={"X-Forwarded-For": f"10.0.0.{index}"})
             assert response.status_code == 401
@@ -124,7 +126,7 @@ def test_rate_limit_persists_across_clients_and_ignores_forwarded_headers(app):
         response = another.post("/api/auth/login", json={"username": "alice", "password": PASSWORD})
         assert response.status_code == 429 and "Retry-After" in response.headers
     with app.state.session_factory() as db:
-        assert len(list(db.scalars(select(AuthRateLimit)))) == 2
+        assert len(list(db.scalars(select(AuthRateLimit)))) == 3  # API peer, auth peer, auth account.
         assert all("alice" not in key for key in db.scalars(select(AuthRateLimit.key_hash)))
 
 
@@ -178,7 +180,9 @@ def test_secure_cookie_mode_accepts_https_loopback_and_rejects_http_cookie_use(d
     application = create_app(Settings(database_url=database_url, environment="test", cookie_secure=True))
     with TestClient(application, base_url="https://localhost:8000", headers={"Origin": "https://localhost:8000"}) as browser:
         response = browser.post("/api/auth/register", json={"username": "secure_user", "password": PASSWORD})
-        assert response.status_code == 201, response.text
+        assert response.status_code == 202, response.text
+        response = browser.post("/api/auth/login", json={"username": "secure_user", "password": PASSWORD})
+        assert response.status_code == 200, response.text
         assert all("Secure" in value and "HttpOnly" in value for value in response.headers.get_list("set-cookie"))
         browser.headers["X-CSRF-Token"] = response.json()["csrf_token"]
         assert browser.get("/api/auth/me").status_code == 200
@@ -233,7 +237,7 @@ def test_concurrent_failed_logins_share_one_persistent_rate_budget(app):
     from concurrent.futures import ThreadPoolExecutor
     from dataclasses import replace
     from threading import Barrier
-    app.state.settings = replace(app.state.settings, auth_account_limit=3)
+    app.state.settings = replace(app.state.settings, auth_account_limit=4)
     with raw_client(app) as browser:
         authenticate_client(browser, "limited_account")
     gate = Barrier(4)

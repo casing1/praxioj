@@ -10,6 +10,7 @@ from praxioj_api.models import (AuthSession, ConversationMessage, Evaluation, Pr
                                Submission, TraceEvent, User, WorkspaceFile, utcnow)
 from praxioj_api.retention import purge_expired
 from praxioj_api.retention_models import AuditRecord
+from praxioj_api.quota_models import TraceUsage
 from conftest import authenticate_client
 
 
@@ -54,6 +55,8 @@ def test_expired_trace_is_purged_but_evaluation_marks_evidence_unavailable(clien
     assert purge_expired(app.state.session_factory, app.state.settings) == 1
     assert purge_expired(app.state.session_factory, app.state.settings) == 0
     with app.state.session_factory() as db:
+        usage = db.get(TraceUsage, sid)
+        assert usage is None or usage.bytes_used == 0
         assert db.scalar(select(func.count()).select_from(TraceEvent).where(TraceEvent.session_id == sid)) == 0
         record = db.scalar(select(AuditRecord).where(AuditRecord.action == "trace_expired"))
         assert record.details["head_sha256"] == head and record.details["deleted_events"] > 0
@@ -71,6 +74,7 @@ def test_idle_expiry_blocks_new_work_and_retention_does_not_delete_active_run(cl
     assert purge_expired(app.state.session_factory, app.state.settings) == 0
     assert client.post(f"/api/sessions/{sid}/runs", json={"request_id": str(uuid4()), "content": "test"}).status_code == 410
     assert client.put(f"/api/sessions/{sid}/draft", json={"content": "expired write"}).status_code == 410
+    assert client.post("/api/auth/reauthenticate", json={"password": "synthetic-test-passphrase-2026"}).status_code == 200
     assert client.post("/api/auth/delete", json={}).status_code == 409
     with app.state.session_factory.begin() as db:
         db.get(SolveSession, sid).active_run_id = None
@@ -109,6 +113,7 @@ def test_account_erasure_removes_private_content_and_revokes_other_logins(client
     user_id = client.get("/api/auth/me").json()["user"]["id"]
     client.post(f"/api/sessions/{sid}/messages", json={"content": "private canary"})
     receipt = client.post(f"/api/sessions/{sid}/submissions", json={"content": "private final canary"}).json()
+    assert client.post("/api/auth/reauthenticate", json={"password": "synthetic-test-passphrase-2026"}).status_code == 200
     assert client.post("/api/auth/delete", json={}).json() == {"deleted_sessions": 1}
     assert client.get("/api/auth/me").status_code == 401
     assert client.get(f"/api/evaluations/{receipt['evaluation_id']}").status_code == 401

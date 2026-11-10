@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import timedelta, timezone
 from secrets import token_urlsafe
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, func, or_, select
 
 from praxioj.tracing import EventType
 from .job_models import Job
@@ -97,12 +97,15 @@ def cancel_locked(db, session, run):
 
 
 class JobRepository:
-    def __init__(self, session_factory, *, lease_seconds=15):
+    def __init__(self, session_factory, *, lease_seconds=15, max_running=4):
         self.session_factory = session_factory
         self.lease_seconds = lease_seconds
+        self.max_running = max_running
 
     def claim(self, worker_id):
         with self.session_factory.begin() as db:
+            from .backup import assert_not_restored_database
+            assert_not_restored_database(db.connection())
             now = database_now(db)
             # Lock the session first, including for competing claims. The second
             # fresh query below rechecks state after waiting on any existing lock.
@@ -133,6 +136,15 @@ class JobRepository:
             if run.cancel_requested or session.status != "active":
                 terminalize(db, session, run, job, "cancelled", "cancelled")
                 return None
+            from .quotas import admission_lock, check_trace_admission, QuotaExceeded
+            admission_lock(db)
+            if db.scalar(select(func.count()).select_from(Job).where(Job.state == "RUNNING")) >= self.max_running:
+                return None
+            try:
+                check_trace_admission(db, session)
+            except QuotaExceeded:
+                terminalize(db, session, run, job, "failed", "trace_storage_limit")
+                return None
             job.state = "RUNNING"
             job.worker_id = worker_id
             job.claim_token = token_urlsafe(32)
@@ -142,9 +154,15 @@ class JobRepository:
             job.deadline_at = now + timedelta(seconds=job.max_seconds)
             job.lease_expires_at = min(now + timedelta(seconds=self.lease_seconds), job.deadline_at)
             run.status = "running"
-            append_trace(db, session, EventType.SESSION_STATE_CHANGED,
-                {"run_status": "running", "job_state": "RUNNING", "attempt": job.attempt, "fence": job.fence},
-                resource_ids={"run_id": run.id, "job_id": run.id}, correlation_id=run.id)
+            try:
+                append_trace(db, session, EventType.SESSION_STATE_CHANGED,
+                    {"run_status": "running", "job_state": "RUNNING", "attempt": job.attempt, "fence": job.fence},
+                    resource_ids={"run_id": run.id, "job_id": run.id}, correlation_id=run.id)
+            except QuotaExceeded:
+                # The last few bytes may not fit the state event even though
+                # the pre-check saw some free space. Do not strand a pending job.
+                terminalize(db, session, run, job, "failed", "trace_storage_limit")
+                return None
             return Lease(run.id, worker_id, job.claim_token, job.fence)
 
     def heartbeat(self, lease):
@@ -165,18 +183,24 @@ class JobRepository:
             with self.session_factory.begin() as db:
                 now = database_now(db)
                 session = db.scalar(select(SolveSession).join(Job, Job.session_id == SolveSession.id)
-                    .where(Job.state == "RUNNING", or_(Job.lease_expires_at <= now, Job.deadline_at <= now))
+                    .where(or_(and_(Job.state == "RUNNING", or_(Job.lease_expires_at <= now, Job.deadline_at <= now)),
+                        and_(Job.state == "PENDING", or_(SolveSession.trace_expires_at <= now, SolveSession.trace_expires_at.is_(None)))))
                     .order_by(Job.lease_expires_at, Job.run_id).limit(1)
                     .with_for_update(of=SolveSession, skip_locked=True))
                 if session is None:
                     break
                 run = db.scalar(select(WorkspaceRun).join(Job, Job.run_id == WorkspaceRun.id)
-                    .where(Job.session_id == session.id, Job.state == "RUNNING")
+                    .where(Job.session_id == session.id, Job.state.in_(("PENDING", "RUNNING")))
                     .with_for_update(of=WorkspaceRun))
                 if run is None:
                     continue
                 job = db.scalar(select(Job).where(Job.run_id == run.id).with_for_update().execution_options(populate_existing=True))
                 now = database_now(db)
+                if job.state == "PENDING":
+                    if session.trace_expires_at is None or aware(session.trace_expires_at) <= now:
+                        terminalize(db, session, run, job, "failed", "session_expired")
+                        recovered += 1
+                    continue
                 if job.state != "RUNNING" or (aware(job.lease_expires_at) > now and aware(job.deadline_at) > now):
                     continue
                 code = "job_timeout" if aware(job.deadline_at) <= now else "lease_expired"
