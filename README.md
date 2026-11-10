@@ -91,5 +91,6 @@ Python tests use isolated databases and local HTTP fixtures; frontend tests exer
 - [Problem format](docs/specifications/problem-format.md), [trace events](docs/specifications/trace-events.md), [evaluation contract](docs/specifications/evaluation-contract.md)
 - [Runtime and tools](docs/specifications/runtime-and-tools.md), [security boundaries](SECURITY.md), and [roadmap](docs/development/roadmap.md)
 - [Contributing](CONTRIBUTING.md)
+- [Engineering workflow](docs/development/engineering-workflow.md): PR writing, per-change README review, and mandatory optimization/hardening gates
 
 Copyright 2026 DoHyun Choi. PraxiOJ's original code is licensed under the **Apache License, Version 2.0** (SPDX: `Apache-2.0`); see [LICENSE](LICENSE) and [NOTICE](NOTICE). Contributors retain copyright in their own contributions. Third-party components retain their original licenses and notices; see [third-party web notices](THIRD_PARTY_NOTICES.txt) and the [licensing and distribution notes](docs/development/licensing.md). External contributions are welcome under the process in [CONTRIBUTING.md](CONTRIBUTING.md).
