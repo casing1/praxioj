@@ -9,7 +9,7 @@
 | `praxioj.tracing` | Versioned envelope, event types, collector/query contracts, redaction, canonical hash verification | Platform session ownership decisions |
 | `praxioj.evaluation` | Input/output contracts, evidence, trusted evaluator registry and execution contract | Importing user modules, HTTP, contestant code execution |
 | `praxioj.execution` | Workspace/file/tool/resource/network/artifact lifecycle interfaces | A claimed or improvised sandbox |
-| `praxioj_api` | SQL models, account/role authorization, durable jobs, leases, retention, safe REST serialization | Defining author-specific task content, running untrusted code |
+| `praxioj_api` | SQL models, account/role authorization, durable jobs, leases, atomic quotas, worker operations, retention/export/erasure and safe REST serialization | Defining author-specific task content, running untrusted code |
 | `apps/web` | Participant interaction and rendering of API data | Secrets, evaluator configuration, authoritative scoring |
 
 ```mermaid
@@ -38,3 +38,5 @@ Arrows show allowed conceptual dependencies, not a requirement that every module
 Problem authors extend the system today through declarative, versioned manifests and supported evaluator configuration. Authors cannot currently upload a Python plugin and cause it to execute. This is an intentional limit of the safe foundation.
 
 `praxioj_api.worker` is a separate trusted AI runtime process, backed by `jobs.py` and PostgreSQL. It owns leases, heartbeats, runtime orchestration and periodic retention cleanup. It does not execute contestant code. A future isolated Judge remains a separate boundary; implementing the current worker does not provide that sandbox.
+
+`quotas.py` owns transactional policy admission and reservations; nullable provider usage remains a Framework fact independent of policy accounting. `operations.py` exposes role-protected bounded views and payload-free process metrics. `maintenance.py` provides recovery/cleanup without a running AI worker. `data_governance.py` owns participant exports; `backup.py` is a trusted local operator CLI using external PostgreSQL tools, not a participant archive-import endpoint. These infrastructure decisions remain outside the Framework.
