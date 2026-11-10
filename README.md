@@ -9,9 +9,9 @@ PraxiOJ provides the infrastructure for authors to define problems and evaluate 
 
 The **Framework** is an independently installable Python library for problem manifests, AI provider adapters, traces, evaluation, and execution contracts. The **Platform** adds a FastAPI REST API, PostgreSQL persistence, and a React participant workspace. Framework code never imports the web server, ORM, or frontend.
 
-Milestone 2 adds an AI Workspace: persistent conversation and draft, asynchronous model runs, cancellation, permission-checked logical file tools, usage accounting, and ordered traces. The default Mock Provider needs no credentials. A server-configured OpenAI-compatible Chat Completions adapter can connect to hosted APIs or local LLM endpoints. Two sample problems use the existing trusted text rubric. There is no arbitrary code execution, terminal, security sandbox, or Judge Worker.
+Milestone 3 adds account authentication, backend roles, a PostgreSQL job queue with a separate worker, bounded trace retention, hash verification, and evidence-based evaluation. It preserves the AI Workspace: persistent conversation and draft, asynchronous model runs, cancellation, permission-checked logical file tools, usage accounting, and ordered traces. The default Mock Provider needs no credentials. A server-configured OpenAI-compatible Chat Completions adapter can connect to hosted APIs or local LLM endpoints. Three sample problems demonstrate text and trace-based rubrics. There is no arbitrary code execution, terminal, security sandbox, or Judge Worker.
 
-> Development preview only. Keep it on localhost. Browser cookies separate local participants, but there is no production login, role enforcement, or public deployment support. Do not enter secrets or sensitive personal data.
+> Development preview only. Keep it on localhost. Account sessions and role checks are implemented, but production hardening and public deployment support are not established. Do not enter secrets or sensitive personal data.
 
 ## Run with Docker Compose
 
@@ -23,7 +23,7 @@ docker compose up --build -d --wait
 
 Open **http://127.0.0.1:5173**. API documentation is at **http://127.0.0.1:8000/api/docs**; health is at **http://127.0.0.1:8000/api/health**. Migrations and idempotent sample registration run before the API starts. Host ports bind to loopback only. PostgreSQL has no published port in this default setup. API/web use a bridge network for loopback port publishing; this does not provide a contestant execution sandbox.
 
-Select **Build a release plan in your AI workspace**, choose Mock, and start a session. Ask **Please save a release plan in plan.txt** to exercise the deterministic tool flow. Inspect tool authorization/results and the saved file, load it into the final-answer draft, save, and submit. The result screen displays criterion scores, feedback, and recorded events. Mock replies are predefined demonstrations, not actual model inference. The original **Plan a reliable release** problem remains available.
+Register a participant account, then select **Build a release plan in your AI workspace**, choose Mock, and start a session. Ask **Please save a release plan in plan.txt** to exercise the deterministic tool flow. Inspect tool authorization/results and the saved file, load it into the final-answer draft, save, and submit. The result screen displays criterion scores, feedback, and recorded events. Mock replies are predefined demonstrations, not actual model inference. The original **Plan a reliable release** problem remains available. **Create a release plan with reviewable evidence** additionally evaluates the permitted tool and artifact history.
 
 See [AI Workspace setup](docs/development/ai-workspace.md) for provider configuration and a credential-free local HTTP fixture. No API key or paid call is needed for normal tests.
 
@@ -83,13 +83,13 @@ make install
 make test
 ```
 
-Python tests use isolated databases and local HTTP fixtures; frontend tests exercise requests and interactions with mocked HTTP responses. External provider tests require explicit opt-in and otherwise skip. PostgreSQL integration and full-stack smoke checks are separate checks; see the [M2 validation record](docs/development/validation-m2.md) and historical [M1 validation](docs/development/validation.md). See [version choices](docs/development/versions.md) for dependency pins.
+Python tests use isolated databases and local HTTP fixtures; frontend tests exercise requests and interactions with mocked HTTP responses. External provider tests require explicit opt-in and otherwise skip. PostgreSQL integration and full-stack smoke checks are separate checks; see the [M3 validation record](docs/development/validation-m3.md), [Preflight report](docs/development/preflight-validation.md), historical [M2 validation record](docs/development/validation-m2.md) and historical [M1 validation](docs/development/validation.md). See [version choices](docs/development/versions.md) for dependency pins.
 
 ## Design and next steps
 
 - [Architecture](docs/architecture/overview.md) and [module boundaries](docs/architecture/module-boundaries.md)
 - [Problem format](docs/specifications/problem-format.md), [trace events](docs/specifications/trace-events.md), [evaluation contract](docs/specifications/evaluation-contract.md)
-- [Runtime and tools](docs/specifications/runtime-and-tools.md), [security boundaries](SECURITY.md), and [Milestone 3 roadmap](docs/development/roadmap.md)
+- [Runtime and tools](docs/specifications/runtime-and-tools.md), [security boundaries](SECURITY.md), and [roadmap](docs/development/roadmap.md)
 - [Contributing](CONTRIBUTING.md)
 
 Copyright 2026 DoHyun Choi. PraxiOJ's original code is licensed under the **Apache License, Version 2.0** (SPDX: `Apache-2.0`); see [LICENSE](LICENSE) and [NOTICE](NOTICE). Contributors retain copyright in their own contributions. Third-party components retain their original licenses and notices; see [third-party web notices](THIRD_PARTY_NOTICES.txt) and the [licensing and distribution notes](docs/development/licensing.md). External contributions are welcome under the process in [CONTRIBUTING.md](CONTRIBUTING.md).

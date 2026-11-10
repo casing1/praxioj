@@ -17,6 +17,7 @@ from sqlalchemy.engine import make_url
 from praxioj_api.main import create_app
 from praxioj_api.registry import register_directory
 from praxioj_api.settings import Settings
+from worker_support import worker_thread
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -57,8 +58,20 @@ def app(database_url):
 
 @pytest.fixture
 def client(app):
-    with TestClient(app, base_url="http://localhost:8000") as instance:
+    with worker_thread(app), TestClient(app, base_url="http://localhost:8000", headers={"Origin": "http://localhost:8000"}) as instance:
+        authenticate_client(instance)
         yield instance
+
+
+def authenticate_client(client, username=None):
+    """Use real registration and CSRF validation, never an authentication bypass."""
+    response = client.post("/api/auth/register", json={
+        "username": username or "participant_" + uuid4().hex[:16],
+        "password": "synthetic-test-passphrase-2026",
+    }, headers={"Origin": "http://localhost:8000"})
+    assert response.status_code == 201, response.text
+    client.headers["X-CSRF-Token"] = response.json()["csrf_token"]
+    return response.json()
 
 
 @pytest.fixture

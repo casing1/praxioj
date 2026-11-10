@@ -1,0 +1,23 @@
+# Trace retention and evidence integrity
+
+A new session snapshots `min(manifest.trace_retention_days or PRAXIOJ_TRACE_RETENTION_DAYS, PRAXIOJ_TRACE_RETENTION_MAX_DAYS)` and an absolute expiry. Defaults are 30 days and a 90-day operator cap. Authors may request 1–90 days in a versioned manifest; they cannot extend a participant's existing session. Invalid operator bounds fail startup. Changing defaults affects new sessions, not historical deadlines.
+
+Every new persisted event is sealed with schema 1.1, its prior hash, and a canonical SHA-256 digest covering the envelope. The session retains its next sequence and head digest. Verification detects changed payloads, order, duplicate IDs, wrong session and missing suffixes relative to that checkpoint. Session locks keep verification consistent with worker appends. Old unhashed events are `unverified`; migration does not invent historical guarantees. A database administrator can rewrite both the chain and checkpoint. These hashes are not signatures, independent timestamps or complete tamper prevention.
+
+## Access and review
+
+- Participants retrieve their own redacted events and `/api/sessions/{id}/trace/integrity`.
+- Authors review only problems they own through `/api/review/problems/{id}/evaluations` and `/api/review/sessions/{id}/trace`.
+- Review trace responses contain event/resource metadata and selected outcome fields, excluding conversation content, tool arguments and file contents. Their projected events omit hashes; integrity is verified server-side over the original envelopes before projection.
+- Administrators may review assessment metadata and `/api/admin/audit`. This does not expose provider credentials, private evaluator configuration or raw internal exceptions.
+- Review requests create minimal operational audit entries. Author problem lists and review batches are capped at 100 records.
+
+## Expiry and deletion
+
+The worker runs a bounded cleanup batch at startup and about every 60 seconds; `python -m praxioj_api.retention` or the administrator-only POST `/api/admin/retention/purge` can run the same cleanup. Expired traces immediately return HTTP 410 even before physical purge. Expired sessions reject new runs, messages, submissions and draft changes. Idle active sessions are ended by cleanup. Live jobs must be terminalized before trace deletion; expired pending jobs are rejected by the worker without a provider call.
+
+Cleanup deletes event payloads, marks `trace_purged_at`, and retains only the session checkpoint and a deletion audit containing counts and digest. It does not reset sequence numbers or append to the deleted chain. Saved evaluations remain readable with `trace_availability=expired`; event evidence references are then unavailable, not silently reconstructed. Conversations, drafts and submissions are separate account data, not silently claimed to have been deleted by trace retention.
+
+POST `/api/auth/delete` with a valid session and CSRF header erases that account's sessions, messages, drafts, files, submissions, evaluations, runs/jobs and provider-call records. Active runs must first be cancelled (409 otherwise). It revokes all login sessions, removes username/password credentials, and retains an inactive random-ID tombstone for immutable problem ownership and audit relations. Ownership is never transferred to a newly registered username. Existing authored public problem versions remain published; erasing participant data does not rewrite others' pinned tasks.
+
+Audit entries omit original participant payloads and have an independent maximum 90-day lifetime (`PRAXIOJ_AUDIT_RETENTION_DAYS`, default 90). They retain pseudonymous resource IDs for that bounded period. Authentication rate buckets and expired login records have separate short-lived housekeeping. No worker means no scheduled physical cleanup; restart or run the maintenance CLI. The API still denies expired trace reads. Backup erasure, export, legal-hold workflows and storage encryption are not implemented; this development service must not be used for sensitive real participant data.

@@ -10,7 +10,7 @@ class VersionConflict(ValueError):
     """An existing immutable version has different content."""
 
 
-def register_manifest(db: Session, manifest: ProblemManifest) -> ProblemVersion:
+def register_manifest(db: Session, manifest: ProblemManifest, *, author_id: str | None = None) -> ProblemVersion:
     digest = manifest_digest(manifest)
     existing = db.scalar(select(ProblemVersion).where(
         ProblemVersion.problem_id == manifest.id,
@@ -21,7 +21,7 @@ def register_manifest(db: Session, manifest: ProblemManifest) -> ProblemVersion:
             raise VersionConflict("This problem version already exists with different content; increment the version")
         return existing
     if db.get(Problem, manifest.id) is None:
-        db.add(Problem(id=manifest.id))
+        db.add(Problem(id=manifest.id, author_id=author_id))
         db.flush()
     version = ProblemVersion(
         problem_id=manifest.id, version=manifest.version,

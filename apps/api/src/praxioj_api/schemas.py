@@ -48,6 +48,7 @@ class RunView(BaseModel):
     error: RunError | None
     created_at: datetime
     finished_at: datetime | None
+    job: dict | None = None
 
 
 class PublicResource(BaseModel):
@@ -103,6 +104,7 @@ class ProblemPublic(BaseModel):
     resource_limits: PublicLimits
     submission: PublicSubmissionSpec
     evaluation: PublicEvaluationSpec
+    trace_retention_days: int | None = None
 
 
 class MessagePublic(BaseModel):
@@ -145,6 +147,7 @@ class EvaluationPublic(EvaluationResult):
     submission_id: str
     problem_id: str
     problem_version: str
+    trace_availability: Literal["available", "expired", "unavailable"] = "available"
 
 
 class HealthResponse(BaseModel):

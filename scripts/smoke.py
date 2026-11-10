@@ -2,6 +2,7 @@
 """Exercise the real local HTTP workflow. Creates one persisted demo session."""
 from __future__ import annotations
 
+from uuid import uuid4
 import argparse
 import http.cookiejar
 import json
@@ -20,16 +21,22 @@ def main() -> None:
         parser.error("Use a local HTTP development URL.")
     client = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
 
+    csrf = None
+
     def request(path: str, body: dict | None = None, *, opener=client):
         headers = {"Accept": "application/json"}
         data = None
         if body is not None:
             headers.update({"Content-Type": "application/json", "Origin": base})
+            if csrf:
+                headers["X-CSRF-Token"] = csrf
             data = json.dumps(body).encode()
         req = urllib.request.Request(base + "/api" + path, data=data, headers=headers)
         with opener.open(req, timeout=15) as response:
             return json.load(response)
 
+    account = request("/auth/register", {"username": "smoke_" + uuid4().hex[:16], "password": "synthetic-" + uuid4().hex})
+    csrf = account["csrf_token"]
     health = request("/health")
     assert health["status"] == "ok" and health["provider"] == "mock"
     problems = request("/problems")
@@ -56,6 +63,7 @@ def main() -> None:
     assert request(f"/sessions/{session_id}")["status"] == "submitted"
 
     outsider = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+    request("/auth/register", {"username": "outsider_" + uuid4().hex[:16], "password": "synthetic-" + uuid4().hex}, opener=outsider)
     for path in [f"/sessions/{session_id}", f"/sessions/{session_id}/trace", f'/evaluations/{submitted["evaluation_id"]}']:
         try:
             request(path, opener=outsider)

@@ -1,73 +1,57 @@
 # Architecture overview
 
-PraxiOJ is infrastructure for evaluating human–AI collaboration. Problem authors decide what task to pose, what assistance to allow, and which outcomes or observable actions matter. The platform does not ship a domain-specific curriculum or claim to measure a model's hidden reasoning.
-
-## Framework and Platform
+PraxiOJ supplies infrastructure for evaluating observable human–AI work. Authors choose tasks, permitted assistance and criteria. Framework and Platform remain independent: the installable Framework never imports FastAPI, SQLAlchemy or browser code.
 
 ```mermaid
 flowchart LR
-    Participant[Participant browser] --> Web[React participant UI]
-    Web --> API[FastAPI platform]
-    API --> DB[(PostgreSQL)]
-    API --> Framework[PraxiOJ Framework]
-    Python[Independent Python caller] --> Framework
-    Framework --> Mock[Mock AI provider]
-    Framework --> Compatible[Configured compatible API or local LLM]
-    API --> Tools[Authorized logical file tools]
+    Browser[Authenticated React workspace] --> API[FastAPI API]
+    API --> DB[(PostgreSQL accounts, jobs, traces)]
+    Worker[Separate worker process] --> DB
+    Worker --> Runtime[Framework AI Runtime]
+    Runtime --> Mock[Offline Mock]
+    Runtime --> Provider[Server-configured compatible endpoint]
+    Worker --> Tools[Authorized logical file tools]
     Tools --> DB
-    Framework --> Builtin[Trusted built-in evaluator]
-    Framework -. contract only .-> Execution[Future isolated execution backend]
+    API --> Judge[Trusted Framework evaluator]
+    Python[Independent Python caller] --> Judge
 ```
 
-The Framework is the installable `praxioj-framework` distribution. It defines manifests, provider/runtime models, traces, safe logical tools, evaluation contracts, and execution interfaces using Python, Pydantic, and HTTPX. It is usable without the Platform or a database. The Platform adapts those contracts to HTTP, persistence, browser identity, and a participant UI.
+## Boundaries and lifecycle
 
-M1 uses one framework distribution with separate modules, rather than six separately versioned packages. This keeps installation and coordinated contract changes simple while retaining the important import boundaries. A future extraction can preserve the module contracts; the Platform must not become a dependency of the Framework.
+1. A participant registers or signs in. Argon2id verifies passwords; random HttpOnly session cookies refer to hashed server-side records with fixed expiry. CSRF headers protect authenticated writes. Registration grants only participant status.
+2. An author publishes a strict declarative manifest through an authorized API. A trusted local operator can register examples. Problem versions are immutable and sessions pin a version, profile, model policy and retention deadline.
+3. The API atomically stores the user message, Run, PENDING Job and trace. A request UUID identifies a retry; different content under the same UUID conflicts.
+4. A worker claims a job with PostgreSQL locks, assigns a lease/token/fence and commits before provider I/O. Heartbeats renew the lease. Every result/tool/terminal transaction rechecks ownership. The API has no background execution task.
+5. Tool requests are separately validated and authorized before operating on session-local database text files. Nothing executes shell commands, participant Python, containers or general network tools.
+6. Persistent cancellation revokes ownership. An expired lease becomes a failed job with explicit uncertainty; the remote call is not silently replayed. Pending work survives API/worker restart. Recovery requires a running worker.
+7. Submission snapshots text and artifacts, collects authorized trace/usage, and invokes a trusted deterministic Framework evaluator. Final and process criteria can be composed independently. Scores cite observable evidence; they do not establish human understanding.
+8. Trace v1.1 is append-oriented with a SHA-256 chain and a stored session checkpoint. Review reads lock the session while comparing events and checkpoint. Legacy traces remain unverified. Retention removes expired trace payloads and records a minimal separate deletion audit.
 
-## Data relationships
+## Persistence
 
 ```mermaid
 erDiagram
+    User ||--o{ AuthSession : authenticates
+    User ||--o{ Problem : authors
     User ||--o{ SolveSession : owns
     Problem ||--|{ ProblemVersion : versions
     ProblemVersion ||--o{ SolveSession : pins
     SolveSession ||--o{ ConversationMessage : records
     SolveSession ||--o{ TraceEvent : records
-    SolveSession ||--o{ WorkspaceRun : schedules
+    SolveSession ||--o{ WorkspaceRun : requests
+    WorkspaceRun ||--o| Job : schedules
     WorkspaceRun ||--o{ ProviderCall : attempts
     SolveSession ||--o{ WorkspaceFile : isolates
     SolveSession ||--o| Submission : finalizes
     Submission ||--|| Evaluation : evaluates
 ```
 
-A session pins an immutable problem version, so later registrations do not silently change its task or rubric. A submission is the final text artifact and preserves its SHA-256 digest. Its problem version is reached through its immutable session association; evaluation reaches that same version through the submission. Its evaluation records evaluator identity/version, criterion outcomes, feedback, and evidence references. Problem registration is idempotent for identical canonical content; changed content under an existing `(problem_id, version)` is rejected.
+`AuthRateLimit` stores bounded hashed login buckets; `AuditRecord` stores operational metadata separately from participant events. Migrations 0003–0005 add accounts, jobs, and retention/checkpoints. Old browser identities retain their data but cannot log in, claim a new account, or become administrators. Old unfinished runs are quarantined, not replayed. No migration rehashes old evidence as proof of its original integrity.
 
-No participant route accepts an arbitrary owner/user ID as proof of identity. A server-created browser capability identifies the local demo participant. Session, trace, and evaluation queries are scoped to that identity. These boundaries are preparation for real authorization, not production authentication.
+## Compatibility and limits
 
-## A complete M2 solve
+Original M1/M2 manifest digests and Mock/provider contracts remain supported. Existing Run statuses remain `queued/running/completed/failed/cancelled`; the added Job projection exposes `PENDING/RUNNING/COMPLETED/FAILED/CANCELLED`. The legacy synchronous Mock/no-tool `/messages` route remains authenticated and bounded. Evaluation remains synchronous because only small trusted deterministic built-ins execute in process.
 
-1. A local operator validates/registers a directory containing `manifest.json`.
-2. The browser selects a problem version and permitted server runtime profile. Session creation pins model/capability/pricing settings and seeds bounded logical files from inline resources.
-3. A user message and queued run are persisted atomically with a client request UUID. Identical retries return that run.
-4. A single-process task reserves a model attempt, commits, then awaits the provider outside any database transaction. The full role-preserving history accompanies the request.
-5. Assistant tool requests are stored, authorized separately, validated, and executed only against the session's logical DB files. Results/events commit before the next model call.
-6. The UI polls state, usage and trace; it can cancel work, inspect tools/files, save drafts, or end the session. Failures remain explicit and restart recovery does not replay remote calls.
-7. Final submission snapshots artifacts and supplies the authorized trace to the existing evaluator. Submission, result, and session closure commit atomically. The browser retrieves scores and evidence.
+PostgreSQL provides durable transactions and row locks. SQLite is a unit-test convenience and does not establish worker concurrency safety. There is no additional broker. Multiple worker processes are tested; this is not a distributed untrusted-code Judge or a production operations system. The network stack stays on localhost. Full public deployment hardening, account recovery/MFA, global abuse quotas, encrypted secrets/storage, externally anchored integrity and an execution sandbox remain future work.
 
-The legacy synchronous Mock/no-tools `/messages` route retains its original M1 response and event contract. New UI uses the asynchronous `/runs` path. Evaluation stays synchronous because the only implementation is a small trusted deterministic function. There is no Judge Worker, arbitrary code execution, or security sandbox.
-
-## Decisions and tradeoffs
-
-| Decision | Reason and limit |
-| --- | --- |
-| PostgreSQL plus SQLAlchemy 2 | Durable relations, uniqueness constraints, transactional session locks; SQLite is a fast test convenience only. |
-| Alembic migrations | Explicit schema evolution; normal API startup never silently creates tables with `create_all`. |
-| JSON manifest with inline resources | Portable and strict, with no archive extraction or arbitrary file reads in the first milestone. |
-| Provider adapters with explicit capabilities | Mock works offline; compatible APIs use server-only endpoint/credential settings and bounded non-streaming requests. |
-| Single-process asynchronous run loop | Allows progress/cancellation without holding DB locks over network waits; durable run records survive restart, but this is not a distributed scheduler. |
-| Session-bound logical file tools | Strict schemas, allowlists, permissions and quotas; no host filesystem access or execution isolation claims. |
-| Trusted built-in rubric | Demonstrates deterministic grading safely; arbitrary Python evaluator execution waits for worker isolation. |
-| One immutable final submission | Clear initial session lifecycle; retries after a completed submission return a conflict rather than double grading. |
-| Same-origin UI/API | Vite/nginx proxy avoids unnecessary CORS complexity; dev host/origin controls remain explicit. |
-| Local browser capability | Separates local sessions while avoiding a misleading pretend login; publicly reachable deployments remain unsupported. |
-
-Recorded versions, settings, hashes, and events support auditing. They are not a full replay system: future provider nondeterminism, omitted environment details, and external resources require more controls before reproducibility can be claimed.
+See [authentication](../development/authentication.md), [worker lifecycle](persistent-jobs.md), [retention](trace-retention.md), [evaluation](../specifications/evaluation-contract.md), and [security boundaries](../../SECURITY.md).

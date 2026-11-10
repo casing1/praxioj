@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
 
+let csrfToken: string | null = null;
+export function setCsrfToken(token: string | null) { csrfToken = token; }
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -36,6 +39,8 @@ export async function request<T>(
       headers: {
         Accept: "application/json",
         ...(options.body ? { "Content-Type": "application/json" } : {}),
+        ...(csrfToken && options.method && !["GET", "HEAD"].includes(options.method.toUpperCase())
+          ? { "X-CSRF-Token": csrfToken } : {}),
         ...options.headers,
       },
     });
@@ -48,8 +53,13 @@ export async function request<T>(
     );
   }
   const body: unknown = await response.json().catch(() => null);
+  if (response.status === 401 && !path.startsWith("/auth/")) {
+    csrfToken = null;
+    window.dispatchEvent(new Event("praxioj:authentication-expired"));
+  }
   if (!response.ok)
     throw new ApiError(errorDetail(body, response.status), response.status);
+  if (response.status === 204) return undefined as T;
   if (body === null)
     throw new ApiError(
       "The API returned an unexpected response.",

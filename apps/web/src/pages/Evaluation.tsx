@@ -26,6 +26,9 @@ export function Evaluation({ id }: { id: string }) {
   const trace = useResource<TraceEvent[]>(
     result ? `/sessions/${encodeURIComponent(result.session_id)}/trace` : null,
   );
+  const integrity = useResource<{ status: string; event_count: number; expires_at: string | null }>(
+    result ? `/sessions/${encodeURIComponent(result.session_id)}/trace/integrity` : null,
+  );
   if (loading) return <Loading label="Loading evaluation…" />;
   if (error || !result)
     return (
@@ -95,6 +98,7 @@ export function Evaluation({ id }: { id: string }) {
             <div className="criterion-copy">
               <h3>{criterion.title}</h3>
               <p>{criterion.feedback}</p>
+              {criterion.status ? <p className="small-note">{criterion.status}{criterion.evaluator_version ? ` · evaluator ${criterion.evaluator_version}` : ""}</p> : null}
               {criterion.evidence.length ? (
                 <details className="evidence">
                   <summary>Evidence references</summary>
@@ -129,6 +133,8 @@ export function Evaluation({ id }: { id: string }) {
           A chronological record of observable actions in this session. Event
           payloads use best-effort redaction; never enter secrets.
         </p>
+        {integrity.data ? <p className="small-note">Trace integrity: {integrity.data.status}. {integrity.data.expires_at ? `Retention expires ${new Date(integrity.data.expires_at).toLocaleDateString()}. ` : ""}Hashes detect changes relative to the stored checkpoint; they do not prevent a database administrator from replacing evidence.</p> : null}
+        {result.trace_availability === "expired" ? <p role="status">The trace retention period has expired. The saved evaluation remains, but its event references are no longer retrievable.</p> : null}
         {trace.loading ? (
           <Loading label="Loading session activity…" />
         ) : trace.error ? (

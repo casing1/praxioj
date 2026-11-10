@@ -83,3 +83,11 @@ The [workspace sample](../../examples/problems/workspace-plan/manifest.json) use
 - Resource limits add `max_model_calls`, `max_tool_calls`, optional `max_total_tokens`, `request_timeout_seconds`, `max_run_seconds`, `max_file_bytes`, `max_workspace_bytes`, and `max_workspace_files`. See [runtime and tools](runtime-and-tools.md) for observed-token limits and unknown usage.
 
 Inline resources become session-local logical files when a session starts and must satisfy path/size/count limits. Runtime model configuration, provider capabilities, and optional prices are snapshotted per session. API keys and endpoint addresses never enter the manifest or public projection. Unsupported provider/tool combinations fail before work; a model request cannot grant itself permissions.
+
+## M3 evidence and retention additions
+
+Schema `1.2` supports `builtin.evidence-rubric` version `1.0.0`, combining typed declarative final-text, artifact, event, authorized-tool, observed-usage, and constraint criteria. See [evaluation contract](evaluation-contract.md) and `examples/problems/evidence-plan/manifest.json`. Criteria remain private configuration; only their IDs, titles, descriptions, and maximum scores appear in the public projection. No Python entry point, expression, shell command, or network evaluator can be supplied through a manifest.
+
+`trace_retention_days` is optional, accepts integers from 1 through 90, and is visible as policy metadata. `null` delegates to the server policy. The Platform may shorten this value to its operator maximum; an author cannot request indefinite retention. The effective session expiry is a Platform snapshot and does not change when a later problem version is published.
+
+M1 schema `1.0` and M2 schema `1.1` remain readable. An unspecified retention field is omitted from canonical manifest hashing, so unchanged historical manifests retain their identities. An explicit retention value affects the digest. The original `release-plan` digest remains `0c5425eba5f6b5a79c67d5471d80a341497bce7555c2820f59f7985fc4e2e32c`.

@@ -1,46 +1,59 @@
-"""Local demo guardrails, not an authentication or isolation solution."""
-from hashlib import sha256
-from secrets import token_urlsafe
-from fastapi import HTTPException, Request, Response
+"""Account authentication, CSRF authorization, and localhost request boundaries."""
+from secrets import compare_digest
+from fastapi import HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from starlette.datastructures import Headers
 from starlette.responses import JSONResponse
-from .models import User
+from .auth import aware, token_digest
+from .models import AuthSession, User, utcnow
 from .settings import Settings
-
-
-def token_digest(token: str) -> str:
-    return sha256(token.encode("utf-8")).hexdigest()
 
 
 def current_user(db: Session, request: Request) -> User | None:
     token = request.cookies.get(request.app.state.settings.cookie_name)
     if not token or len(token) > 128:
         return None
-    return db.scalar(select(User).where(User.identity_token_hash == token_digest(token)))
+    query = select(User, AuthSession).join(AuthSession, AuthSession.user_id == User.id).where(
+        AuthSession.token_hash == token_digest(token), AuthSession.revoked_at.is_(None),
+        AuthSession.expires_at > utcnow(), User.is_active.is_(True),
+        User.username.is_not(None), User.password_hash.is_not(None),
+    )
+    if request.method not in {"GET", "HEAD", "OPTIONS"}:
+        # User first, then solve-session/job locks: account deletion and role
+        # changes serialize with every authenticated mutation.
+        query = query.with_for_update(of=User)
+    row = db.execute(query).first()
+    if row is None:
+        return None
+    auth_session = db.scalar(select(AuthSession).where(AuthSession.id == row[1].id)
+                             .execution_options(populate_existing=True))
+    if auth_session is None or auth_session.revoked_at is not None or aware(auth_session.expires_at) <= utcnow():
+        return None
+    request.state.auth_session = auth_session
+    return row[0]
 
 
 def require_user(db: Session, request: Request) -> User:
     user = current_user(db, request)
     if user is None:
-        raise HTTPException(404, "Resource not found")
+        raise HTTPException(401, "Authentication required")
+    if request.method not in {"GET", "HEAD", "OPTIONS"}:
+        csrf = request.headers.get("x-csrf-token", "")
+        if not csrf or len(csrf) > 128 or not compare_digest(token_digest(csrf), request.state.auth_session.csrf_hash):
+            raise HTTPException(403, "CSRF validation failed")
     return user
 
 
-def ensure_user(db: Session, request: Request, response: Response) -> User:
-    user = current_user(db, request)
-    if user is not None:
-        return user
-    token = token_urlsafe(32)
-    user = User(identity_token_hash=token_digest(token), role="participant")
-    db.add(user)
-    db.flush()
-    response.set_cookie(
-        request.app.state.settings.cookie_name, token,
-        httponly=True, samesite="strict", secure=False, path="/", max_age=86400 * 7,
-    )
+def require_role(db: Session, request: Request, *roles: str) -> User:
+    user = require_user(db, request)
+    if user.role not in roles:
+        raise HTTPException(403, "Insufficient permissions")
     return user
+
+
+def can_manage_problem(user: User, problem) -> bool:
+    return user.role == "administrator" or (user.role == "author" and problem.author_id == user.id)
 
 
 class LocalDevelopmentGuard:

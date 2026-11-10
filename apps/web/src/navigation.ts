@@ -5,6 +5,7 @@ export type Route =
   | { page: "problem"; id: string; version: string }
   | { page: "session"; id: string }
   | { page: "evaluation"; id: string }
+  | { page: "author" }
   | { page: "missing" };
 
 function readRoute(): Route {
@@ -14,6 +15,7 @@ function readRoute(): Route {
     .filter(Boolean);
   try {
     if (parts.length === 0) return { page: "problems" };
+    if (parts.length === 1 && parts[0] === "author") return { page: "author" };
     if (parts[0] === "problems" && parts.length === 3)
       return {
         page: "problem",

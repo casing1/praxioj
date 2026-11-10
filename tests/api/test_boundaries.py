@@ -6,34 +6,38 @@ from praxioj.problems import ProblemManifest
 from praxioj_api.models import ProblemVersion
 from praxioj_api.registry import register_manifest
 from praxioj_api.settings import Settings
+from conftest import authenticate_client
 
 
 def test_browser_identity_isolation(client, app, session):
     sid = session["id"]
     receipt = client.post(f"/api/sessions/{sid}/submissions", json={"content": "Goal"}).json()
     with TestClient(app, base_url="http://localhost:8000") as other:
-        assert other.get(f"/api/sessions/{sid}").status_code == 404
-        assert other.get(f"/api/sessions/{sid}/trace").status_code == 404
-        assert other.get(f"/api/evaluations/{receipt['evaluation_id']}").status_code == 404
+        assert other.get(f"/api/sessions/{sid}").status_code == 401
+        assert other.get(f"/api/sessions/{sid}/trace").status_code == 401
+        assert other.get(f"/api/evaluations/{receipt['evaluation_id']}").status_code == 401
+        authenticate_client(other)
         created = other.post("/api/sessions", json={"problem_id": "release-plan", "version": "1.0.0"})
         assert created.status_code == 201
-        assert other.cookies["praxioj_dev_identity"] != client.cookies["praxioj_dev_identity"]
+        assert other.cookies["praxioj_session"] != client.cookies["praxioj_session"]
         assert other.get(f"/api/sessions/{sid}").status_code == 404
         assert other.post(f"/api/sessions/{sid}/messages", json={"content": "steal"}).status_code == 404
         assert other.post(f"/api/sessions/{sid}/submissions", json={"content": "steal"}).status_code == 404
 
 
 def test_identity_cookie_flags(client):
-    response = client.post("/api/sessions", json={"problem_id": "release-plan", "version": "1.0.0"})
+    username = client.get("/api/auth/me").json()["user"]["username"]
+    response = client.post("/api/auth/login", json={"username": username, "password": "synthetic-test-passphrase-2026"})
     cookie = response.headers["set-cookie"].lower()
     assert "httponly" in cookie and "samesite=strict" in cookie
     assert response.headers["cache-control"] == "no-store"
 
 
-def test_unauthenticated_arbitrary_user_id_is_not_trusted(client):
-    response = client.post("/api/sessions", json={"problem_id": "release-plan", "version": "1.0.0", "user_id": "administrator"})
-    assert response.status_code == 422
-    assert not client.cookies
+def test_unauthenticated_arbitrary_user_id_is_not_trusted(app):
+    with TestClient(app, base_url="http://localhost:8000") as anonymous:
+        response = anonymous.post("/api/sessions", json={"problem_id": "release-plan", "version": "1.0.0", "user_id": "administrator"})
+        assert response.status_code == 422
+        assert not anonymous.cookies
 
 
 @pytest.mark.parametrize("body", [{}, {"content": ""}, {"content": " \n\t"}, {"content": 123}, {"content": "ok", "event_type": "SYSTEM"}])

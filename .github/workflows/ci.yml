@@ -86,3 +86,10 @@ jobs:
           persist-credentials: false
       - name: Validate Compose configuration without starting services
         run: docker compose config --quiet
+      - name: Build and start the local API, worker, database, and web proxy
+        run: docker compose up --build -d --wait
+      - name: Verify account, worker, tools, trace integrity, and evidence evaluation
+        run: python3 scripts/smoke-m3.py --base-url http://127.0.0.1:5173
+      - name: Stop the ephemeral CI stack
+        if: always()
+        run: docker compose down

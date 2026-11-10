@@ -1,4 +1,4 @@
-"""Durable records around a single-process, asynchronous AI/tool execution loop.
+"""Fenced AI/tool execution loop invoked only by an explicitly started worker.
 
 Every provider await happens outside database transactions. No implicit retry:
 remote providers may have charged even when their response was not received.
@@ -19,6 +19,7 @@ from praxioj.tracing import EventType, redact_payload
 from .models import ConversationMessage, ProviderCall, SolveSession, WorkspaceRun, utcnow
 from .services import append_trace, manifest_for, messages_for
 from .workspace import DatabaseWorkspaceStore
+from .jobs import LeaseLost, require_lease, terminalize
 
 logger = logging.getLogger("praxioj.internal.runtime")
 TERMINAL = {"completed", "failed", "cancelled"}
@@ -29,7 +30,13 @@ ERROR_MESSAGES = {
     "provider_timeout": "The provider request timed out; usage may be incomplete.",
     "run_timeout": "The run exceeded its time limit.",
     "cancelled": "The run was cancelled; provider usage may be incomplete.",
-    "interrupted": "The server restarted before this run finished. Start a new run to continue.",
+    "interrupted": "The legacy run was interrupted before migration.",
+    "lease_expired": "The worker lease expired. Provider effects and usage may be unknown; this run was not replayed.",
+    "worker_stopped": "The worker stopped before completion. Provider effects and usage may be unknown.",
+    "job_timeout": "The durable job exceeded its deadline. Provider usage may be incomplete.",
+    "account_unavailable": "The account is not available for execution.",
+    "session_expired": "The session retention period has expired; this queued run was not executed.",
+    "legacy_run_quarantined": "This unauthenticated legacy run cannot be resumed automatically.",
     "model_call_limit": "This session's model call limit has been reached.",
     "tool_call_limit": "This session's tool call limit has been reached.",
     "token_limit": "This session's observed token limit has been reached.",
@@ -126,125 +133,99 @@ def budget_code(usage, limits):
     return None
 
 
+def finish_locked(db, session, run, status, code=None, provider_details=None):
+    """Terminal transition shared by fenced executors and authorized control paths."""
+    provider_details = provider_details or {}
+    for call in db.scalars(select(ProviderCall).where(ProviderCall.run_id == run.id, ProviderCall.status == "started")):
+        call.status, call.error_code, call.finished_at = "failed", code, utcnow()
+        append_trace(db, session, EventType.PROVIDER_CALL_COMPLETED,
+            {"status": "failed", "code": code, "usage": {"input_tokens": None, "output_tokens": None}, **provider_details},
+            resource_ids={"run_id": run.id, "provider_call_id": call.id}, correlation_id=run.id)
+    # A stopped tool loop must not leave unmatched tool requests in history.
+    history = messages_for(db, session.id)
+    pending = {}
+    for message in history:
+        if message.role == "assistant":
+            for tool in message.tool_calls:
+                pending[tool["id"]] = tool
+        elif message.role == "tool":
+            pending.pop(message.tool_call_id, None)
+    next_position = len(history) + 1
+    for tool in pending.values():
+        refs = {"run_id": run.id, "tool_call_id": tool["id"]}
+        requested = append_trace(db, session, EventType.TOOL_CALL_REQUESTED,
+            {"name": tool["name"], "arguments": tool["arguments"]}, actor="assistant",
+            resource_ids=refs, correlation_id=run.id)
+        authorized = append_trace(db, session, EventType.TOOL_CALL_AUTHORIZED,
+            {"allowed": False, "code": code or status,
+             "message": "The run stopped before this tool could execute."},
+            resource_ids=refs, correlation_id=run.id, parent_event_id=str(requested.event_id))
+        result = {"call_id": tool["id"], "status": "denied",
+                  "content": {"code": code or status, "executed": False}}
+        append_trace(db, session, EventType.TOOL_CALL_COMPLETED, result,
+            resource_ids=refs, correlation_id=run.id, parent_event_id=str(authorized.event_id))
+        db.add(ConversationMessage(session_id=session.id, position=next_position,
+            role="tool", tool_call_id=tool["id"], content=json.dumps(result)))
+        next_position += 1
+    run.status, run.error, run.finished_at = status, safe_error(code) if code else None, utcnow()
+    if session.active_run_id == run.id:
+        session.active_run_id = None
+    if code:
+        append_trace(db, session, EventType.ERROR, {"stage": "ai_runtime", **safe_error(code)},
+                     resource_ids={"run_id": run.id}, correlation_id=run.id)
+    append_trace(db, session, EventType.SESSION_STATE_CHANGED,
+                 {"run_status": status, "session_status": session.status},
+                 resource_ids={"run_id": run.id}, correlation_id=run.id)
+    if code:
+        logger.warning("runtime_failure code=%s run_id=%s http_status=%s", code, run.id, provider_details.get("http_status"))
+
+
 class RunManager:
-    def __init__(self, app):
+    """One leased execution; API creation alone never schedules asynchronous work."""
+    def __init__(self, app, lease=None):
         self.app = app
-        self.tasks = {}
+        self.lease = lease
         self.registry = default_tool_registry()
         self.dispatcher = ToolDispatcher(self.registry)
 
-    def launch(self, run_id):
-        if run_id not in self.tasks:
-            task = asyncio.create_task(self.execute(run_id))
-            self.tasks[run_id] = task
-            task.add_done_callback(lambda finished: self._finished(run_id, finished))
-
-    def _finished(self, run_id, task):
-        self.tasks.pop(run_id, None)
-        if not task.cancelled() and task.exception() is not None:
-            # Retrieving the exception prevents asyncio from emitting raw SQL or
-            # upstream content if recovery persistence itself encountered an outage.
-            logger.error("runtime_failure code=state_persistence_failed run_id=%s", run_id)
-
-    def cancel(self, run_id):
-        task = self.tasks.get(run_id)
-        if task:
-            task.cancel()
-
-    async def shutdown(self):
-        tasks = list(self.tasks.values())
-        for task in tasks:
-            task.cancel()
-        if tasks:
-            await asyncio.gather(*tasks, return_exceptions=True)
-
-    def recover(self):
-        with self.app.state.session_factory() as db:
-            ids = list(db.scalars(select(WorkspaceRun.id).where(WorkspaceRun.status.in_(["queued", "running"]))))
-        for run_id in ids:
-            self.finish(run_id, "failed", "interrupted")
-
     def _locked(self, db, run_id):
-        # Always session then run: the same lock order as participant endpoints.
-        run = db.get(WorkspaceRun, run_id)
-        if run is None:
-            return None, None
-        session = db.scalar(select(SolveSession).where(SolveSession.id == run.session_id).with_for_update())
-        db.refresh(run)
+        if self.lease is None or self.lease.run_id != run_id:
+            raise LeaseLost()
+        session, run, _job = require_lease(db, self.lease)
         return session, run
 
     def finish(self, run_id, status, code=None, provider_details=None):
-        provider_details = provider_details or {}
+        if self.lease is None or self.lease.run_id != run_id:
+            return False
         with self.app.state.session_factory.begin() as db:
-            session, run = self._locked(db, run_id)
-            if run is None or run.status in TERMINAL:
-                return
-            for call in db.scalars(select(ProviderCall).where(ProviderCall.run_id == run.id, ProviderCall.status == "started")):
-                call.status, call.error_code, call.finished_at = "failed", code, utcnow()
-                append_trace(db, session, EventType.PROVIDER_CALL_COMPLETED,
-                    {"status": "failed", "code": code, "usage": {"input_tokens": None, "output_tokens": None}, **provider_details},
-                    resource_ids={"run_id": run.id, "provider_call_id": call.id}, correlation_id=run.id)
-            # A stopped tool loop must not leave unmatched tool requests in history.
-            history = messages_for(db, session.id)
-            pending = {}
-            for message in history:
-                if message.role == "assistant":
-                    for tool in message.tool_calls:
-                        pending[tool["id"]] = tool
-                elif message.role == "tool":
-                    pending.pop(message.tool_call_id, None)
-            next_position = len(history) + 1
-            for tool in pending.values():
-                refs = {"run_id": run.id, "tool_call_id": tool["id"]}
-                requested = append_trace(db, session, EventType.TOOL_CALL_REQUESTED,
-                    {"name": tool["name"], "arguments": tool["arguments"]}, actor="assistant",
-                    resource_ids=refs, correlation_id=run.id)
-                authorized = append_trace(db, session, EventType.TOOL_CALL_AUTHORIZED,
-                    {"allowed": False, "code": code or status,
-                     "message": "The run stopped before this tool could execute."},
-                    resource_ids=refs, correlation_id=run.id, parent_event_id=str(requested.event_id))
-                result = {"call_id": tool["id"], "status": "denied",
-                          "content": {"code": code or status, "executed": False}}
-                append_trace(db, session, EventType.TOOL_CALL_COMPLETED, result,
-                    resource_ids=refs, correlation_id=run.id, parent_event_id=str(authorized.event_id))
-                db.add(ConversationMessage(session_id=session.id, position=next_position,
-                    role="tool", tool_call_id=tool["id"], content=json.dumps(result)))
-                next_position += 1
-            run.status, run.error, run.finished_at = status, safe_error(code) if code else None, utcnow()
-            session.active_run_id = None
-            if code:
-                append_trace(db, session, EventType.ERROR, {"stage": "ai_runtime", **safe_error(code)},
-                             resource_ids={"run_id": run.id}, correlation_id=run.id)
-            append_trace(db, session, EventType.SESSION_STATE_CHANGED,
-                         {"run_status": status, "session_status": session.status},
-                         resource_ids={"run_id": run.id}, correlation_id=run.id)
-        if code:
-            logger.warning("runtime_failure code=%s run_id=%s http_status=%s", code, run_id, provider_details.get("http_status"))
+            try:
+                session, run, job = require_lease(db, self.lease)
+            except LeaseLost:
+                return False
+            terminalize(db, session, run, job, status, code, provider_details)
+        return True
 
     async def execute(self, run_id):
         try:
             with self.app.state.session_factory.begin() as db:
                 session, run = self._locked(db, run_id)
-                if run is None or run.status in TERMINAL:
-                    return
                 if run.cancel_requested:
                     raise asyncio.CancelledError()
                 _, manifest = manifest_for(db, session)
                 seconds = manifest.resource_limits.max_run_seconds
-                run.status = "running"
-                append_trace(db, session, EventType.SESSION_STATE_CHANGED, {"run_status": "running"},
-                             resource_ids={"run_id": run.id}, correlation_id=run.id)
             deadline = monotonic() + seconds
             async with asyncio.timeout(seconds):
                 await self.loop(run_id, deadline)
                 check_deadline(deadline)
             self.finish(run_id, "completed")
+        except LeaseLost:
+            # No old worker may append errors, usage or tool output after fencing.
+            return
         except asyncio.CancelledError:
-            self.finish(run_id, "cancelled", "cancelled")
+            self.finish(run_id, "failed", "worker_stopped")
         except TimeoutError:
             self.finish(run_id, "failed", "run_timeout")
         except ProviderError as exc:
-            # The adapter exposes only controlled codes. Never log exception text.
             code = exc.code if exc.code in PROVIDER_CODES else "provider_error"
             status = exc.http_status if type(exc.http_status) is int and 100 <= exc.http_status <= 599 else None
             self.finish(run_id, "failed", code, {"http_status": status, "retryable": exc.retryable is True})

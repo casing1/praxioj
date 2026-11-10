@@ -4,7 +4,7 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from praxioj.problems import ProblemManifest
-from praxioj.tracing import EventType, TraceEnvelope, redact_payload
+from praxioj.tracing import EventType, TraceEnvelope, redact_payload, seal_trace_event
 from .models import ConversationMessage, Evaluation, ProblemVersion, SolveSession, Submission, TraceEvent, WorkspaceRun
 
 
@@ -26,6 +26,9 @@ def owned_session(db: Session, session_id: str, user_id: str, *, lock: bool = Fa
 
 
 def active(session: SolveSession) -> None:
+    from .retention import trace_expired
+    if trace_expired(session):
+        raise HTTPException(410, "This session's trace retention period has expired")
     if session.status != "active":
         raise HTTPException(409, "This session is closed")
     if session.active_run_id:
@@ -72,6 +75,10 @@ def append_trace(db: Session, session: SolveSession, event_type: EventType, payl
         resource_ids=resource_ids or {}, source="server",
         correlation_id=correlation_id, parent_event_id=parent_event_id,
     )
+    if session.trace_purged_at is not None:
+        raise ValueError("Cannot append to a purged session trace")
+    event = seal_trace_event(event, session.trace_head_sha256)
+    session.trace_head_sha256 = event.event_hash
     session.next_sequence_number += 1
     db.add(TraceEvent(
         event_id=str(event.event_id), session_id=session.id,
@@ -89,6 +96,9 @@ def traces_for(db: Session, session_id: str) -> list[dict]:
 
 
 def run_public(run: WorkspaceRun) -> dict:
+    from sqlalchemy.orm import object_session
+    from .job_models import Job, job_public
+    db = object_session(run)
     return {"id": run.id, "session_id": run.session_id, "request_id": run.request_id,
             "status": run.status, "error": run.error, "created_at": run.created_at,
-            "finished_at": run.finished_at}
+            "finished_at": run.finished_at, "job": job_public(db.get(Job, run.id)) if db else None}

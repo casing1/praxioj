@@ -1,5 +1,6 @@
-"""FastAPI participant API for the local-only Milestone 2 workspace."""
+"""Authenticated local development API; durable execution lives in a separate worker."""
 import asyncio
+from datetime import timedelta
 from contextlib import asynccontextmanager
 from hashlib import sha256
 import platform
@@ -8,12 +9,13 @@ from uuid import uuid4
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
 from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from praxioj.core import Artifact
-from praxioj.evaluation import EvaluationEngine, EvaluationInput, EvaluationResult, SubmissionData
+from praxioj.evaluation import EvaluationEngine, EvaluationInput, EvaluationResult, ResourceUsageSnapshot, SubmissionData
 from praxioj.problems import ProblemManifest, public_problem
 from praxioj.runtime import AIRuntime, Message, MockProvider, ModelConfig, RuntimeContext
 from praxioj.tracing import EventType, TraceEnvelope
@@ -21,12 +23,15 @@ from praxioj.tracing import EventType, TraceEnvelope
 from .database import make_engine, session_factory
 from .models import ConversationMessage, Evaluation, ProblemVersion, SolveSession, Submission, ProviderCall, WorkspaceFile, utcnow
 from .schemas import ChatResult, ContentRequest, EvaluationPublic, HealthResponse, ProblemPublic, SessionCreate, SessionDetail, SubmissionReceipt
-from .security import LocalDevelopmentGuard, ensure_user, require_user
+from .security import LocalDevelopmentGuard, require_user
+from .auth_routes import install_auth_routes
 from .services import active, append_trace, manifest_for, message_public, messages_for, owned_session, session_public, traces_for
 from .settings import Settings
 from .runs import RunManager, configure_session, scrub, workspace_limits, usage_for, budget_code
 from .workspace import DatabaseWorkspaceStore
 from .workspace_routes import install_workspace_routes
+from .review_routes import install_review_routes
+from .retention import trace_expired, visible_trace
 
 
 def get_db(request: Request):
@@ -44,18 +49,13 @@ def create_app(settings: Settings | None = None, *, database_url: str | None = N
     @asynccontextmanager
     async def lifespan(_app):
         try:
-            _app.state.run_manager.recover()
-        except SQLAlchemyError:
-            raise RuntimeError("Workspace recovery failed; database unavailable or not migrated") from None
-        try:
             yield
         finally:
-            await _app.state.run_manager.shutdown()
             engine.dispose()
 
     app = FastAPI(
-        title="PraxiOJ — Local Development API", version="0.2.0", lifespan=lifespan,
-        description="AI-Assisted Online Judge Framework. Offline mock and configurable OpenAI-compatible providers. No production authentication; bind to loopback.",
+        title="PraxiOJ — Local Development API", version="0.3.0", lifespan=lifespan,
+        description="Authenticated AI workspace with a PostgreSQL worker queue. Development preview; bind to loopback.",
         docs_url="/api/docs", redoc_url=None, openapi_url="/api/openapi.json",
     )
     app.state.settings = settings
@@ -65,7 +65,15 @@ def create_app(settings: Settings | None = None, *, database_url: str | None = N
     app.state.evaluator = EvaluationEngine()
     app.state.run_manager = RunManager(app)
     install_workspace_routes(app)
+    install_auth_routes(app)
+    install_review_routes(app)
     app.add_middleware(LocalDevelopmentGuard, settings=settings)
+
+    @app.exception_handler(RequestValidationError)
+    async def invalid_request(_request, exc):
+        # Validation input/ctx can contain a submitted password, token, or draft.
+        return JSONResponse({"detail": [{"loc": e["loc"], "type": e["type"], "msg": e["msg"]}
+                                       for e in exc.errors()]}, status_code=422)
 
     @app.exception_handler(IntegrityError)
     async def integrity_error(_request, _exc):
@@ -80,7 +88,7 @@ def create_app(settings: Settings | None = None, *, database_url: str | None = N
     def health(db: Db):
         db.execute(text("SELECT 1"))
         revision = db.execute(text("SELECT version_num FROM alembic_version")).scalar_one_or_none()
-        if revision != "0002_workspace":
+        if revision != "0005_trace":
             raise HTTPException(503, "Database migrations are required")
         return HealthResponse()
 
@@ -111,11 +119,13 @@ def create_app(settings: Settings | None = None, *, database_url: str | None = N
             ))
             if version is None:
                 raise HTTPException(404, "Problem version not found")
-            owner = ensure_user(db, request, response)
+            owner = require_user(db, request)
             manifest = ProblemManifest.model_validate(version.manifest)
             profile_id, model_config, snapshot = configure_session(settings, manifest, body.runtime_profile)
+            retention_days = min(manifest.trace_retention_days or settings.trace_retention_days, settings.trace_retention_max_days)
             session = SolveSession(user_id=owner.id, problem_version_id=version.id,
-                                   model_configuration=model_config, runtime_profile=profile_id, profile_snapshot=snapshot)
+                                   model_configuration=model_config, runtime_profile=profile_id, profile_snapshot=snapshot,
+                                   trace_retention_days=retention_days, trace_expires_at=utcnow() + timedelta(days=retention_days))
             db.add(session)
             db.flush()
             store = DatabaseWorkspaceStore(db, session.id, workspace_limits(manifest))
@@ -130,7 +140,8 @@ def create_app(settings: Settings | None = None, *, database_url: str | None = N
                 "evaluator_id": manifest.evaluation.evaluator_id,
                 "evaluator_version": manifest.evaluation.evaluator_version,
                 "environment": {"mode": "local-development", "execution_backend": "unavailable",
-                                "framework_version": "0.1.0", "platform_version": "0.2.0", "python": platform.python_version()},
+                                "framework_version": "0.1.0", "platform_version": "0.3.0", "python": platform.python_version()},
+                "trace_retention_days": retention_days, "trace_expires_at": session.trace_expires_at.isoformat(),
             }, actor="participant", resource_ids={"problem_version_id": version.id})
             result = session_public(db, session)
         return result
@@ -200,7 +211,7 @@ def create_app(settings: Settings | None = None, *, database_url: str | None = N
     def get_trace(session_id: str, request: Request, db: Db):
         owner = require_user(db, request)
         session = owned_session(db, session_id, owner.id)
-        return traces_for(db, session.id)
+        return visible_trace(db, session)
 
     @app.post("/api/sessions/{session_id}/submissions", response_model=SubmissionReceipt, status_code=201)
     def submit(session_id: str, body: ContentRequest, request: Request, db: Db):
@@ -226,11 +237,17 @@ def create_app(settings: Settings | None = None, *, database_url: str | None = N
             append_trace(db, session, EventType.SUBMISSION_CREATED, metadata, actor="participant",
                          resource_ids={"submission_id": submission.id})
             try:
+                usage = usage_for(db, session, manifest)
                 result = request.app.state.evaluator.evaluate(EvaluationInput(
                     problem=manifest,
                     submission=SubmissionData(id=submission.id, content=submission.content, sha256=submission.content_sha256),
                     artifacts=artifacts,
                     trace=[TraceEnvelope.model_validate(e) for e in traces_for(db, session.id)],
+                    usage=ResourceUsageSnapshot(user_messages=session.user_message_count,
+                        model_calls=usage["model_calls"], tool_calls=usage["tool_calls"],
+                        input_tokens=usage["input_tokens"] if usage["usage_complete"] else None,
+                        output_tokens=usage["output_tokens"] if usage["usage_complete"] else None,
+                        usage_complete=usage["usage_complete"], estimated=usage["estimated"]),
                 ))
             except Exception:
                 result = EvaluationResult(
@@ -265,7 +282,8 @@ def create_app(settings: Settings | None = None, *, database_url: str | None = N
             raise HTTPException(404, "Resource not found")
         evaluation, submission, session, version = row
         return {**evaluation.result, "session_id": session.id, "submission_id": submission.id,
-                "problem_id": version.problem_id, "problem_version": version.version}
+                "problem_id": version.problem_id, "problem_version": version.version,
+                "trace_availability": "expired" if trace_expired(session) else "available"}
 
     return app
 

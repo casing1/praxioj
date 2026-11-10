@@ -1,0 +1,127 @@
+{
+  "schema_version": "1.2",
+  "id": "evidence-plan",
+  "version": "1.0.0",
+  "title": "Create a release plan with reviewable evidence",
+  "description": "Use the permitted logical file tools to create plan.txt, review its contents, and submit a release plan. With the offline Mock, ask to \"save a release plan\". The deterministic rubric combines the final text, immutable file snapshot, linked tool authorization/result, artifact history, and observed model-call count. These observations do not prove understanding. Trace retention is at most 30 days and may be shortened by operator policy.",
+  "category": "AI Workspace demo",
+  "difficulty": "introductory",
+  "initial_resources": [
+    {
+      "name": "project-brief.txt",
+      "media_type": "text/plain",
+      "content": "A small team is preparing its first open-source release. The demo needs a reproducible setup, a working test suite, and documented limitations. Draft a concise release-readiness plan in English."
+    }
+  ],
+  "allowed_ai_capabilities": [
+    "chat",
+    "tool_calling"
+  ],
+  "allowed_tools": [
+    "workspace.read_file",
+    "workspace.write_file"
+  ],
+  "resource_limits": {
+    "max_messages": 20,
+    "max_message_chars": 4000,
+    "max_submission_chars": 20000,
+    "max_model_calls": 30,
+    "max_tool_calls": 20,
+    "max_total_tokens": null,
+    "request_timeout_seconds": 30,
+    "max_run_seconds": 90,
+    "max_file_bytes": 16384,
+    "max_workspace_bytes": 65536,
+    "max_workspace_files": 8
+  },
+  "submission": {
+    "kind": "text",
+    "instructions": "Submit text containing Goal, Verification, and Risk sections after creating plan.txt through an authorized write_file call. Use at most ten model calls. Do not request tools outside this problem policy."
+  },
+  "evaluation": {
+    "evaluator_id": "builtin.evidence-rubric",
+    "evaluator_version": "1.0.0",
+    "criteria": [
+      {
+        "id": "final",
+        "title": "Final release plan",
+        "description": "Include Goal, Verification, and Risk sections.",
+        "max_score": 30,
+        "config": {
+          "kind": "final_text",
+          "required_terms": [
+            "goal",
+            "verification",
+            "risk"
+          ]
+        }
+      },
+      {
+        "id": "artifact",
+        "title": "Saved plan snapshot",
+        "description": "Create plan.txt in this session before submitting.",
+        "max_score": 20,
+        "config": {
+          "kind": "artifact",
+          "name": "plan.txt"
+        }
+      },
+      {
+        "id": "tool",
+        "title": "Authorized write",
+        "description": "Record a successful write_file request with its authorization and result.",
+        "max_score": 20,
+        "config": {
+          "kind": "tool_success",
+          "name": "write_file"
+        }
+      },
+      {
+        "id": "history",
+        "title": "Artifact history",
+        "description": "Record at least one workspace file update before submission.",
+        "max_score": 10,
+        "config": {
+          "kind": "event",
+          "event_type": "ARTIFACT_UPDATED",
+          "actor": "system"
+        }
+      },
+      {
+        "id": "usage",
+        "title": "Bounded model calls",
+        "description": "Use at most ten model calls.",
+        "max_score": 10,
+        "config": {
+          "kind": "usage_limit",
+          "metric": "model_calls",
+          "maximum": 10
+        }
+      },
+      {
+        "id": "policy",
+        "title": "Permitted tool requests",
+        "description": "Request only tools allowed by the problem.",
+        "max_score": 10,
+        "config": {
+          "kind": "constraints",
+          "rule": "allowed_tools_only"
+        }
+      }
+    ]
+  },
+  "tool_permissions": [
+    "workspace:read",
+    "workspace:write"
+  ],
+  "ai_policy": {
+    "allowed_providers": [
+      "mock",
+      "compatible"
+    ],
+    "allowed_models": [],
+    "max_output_tokens": 1024,
+    "allow_temperature": true
+  },
+  "trace_retention_days": 30
+}

@@ -1,8 +1,8 @@
 """Platform persistence. Framework models never import these ORM classes."""
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
-from sqlalchemy import JSON, CheckConstraint, DateTime, Boolean, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import JSON, CheckConstraint, DateTime, Boolean, ForeignKey, Integer, String, Text, UniqueConstraint, Index
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -20,9 +20,13 @@ class Base(DeclarativeBase):
 
 class User(Base):
     __tablename__ = "users"
-    __table_args__ = (CheckConstraint("role IN ('administrator', 'author', 'participant')", name="ck_user_role"),)
+    __table_args__ = (CheckConstraint("role IN ('administrator', 'author', 'participant')", name="ck_user_role"),
+                      Index("uq_users_username", "username", unique=True))
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
     identity_token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    username: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    password_hash: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     role: Mapped[str] = mapped_column(String(24), default="participant", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
 
@@ -30,7 +34,26 @@ class User(Base):
 class Problem(Base):
     __tablename__ = "problems"
     id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    author_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+class AuthSession(Base):
+    __tablename__ = "auth_sessions"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    csrf_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True, nullable=False)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class AuthRateLimit(Base):
+    __tablename__ = "auth_rate_limits"
+    key_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    window_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    count: Mapped[int] = mapped_column(Integer, nullable=False)
 
 
 class ProblemVersion(Base):
@@ -56,6 +79,10 @@ class SolveSession(Base):
     problem_version_id: Mapped[str] = mapped_column(ForeignKey("problem_versions.id", ondelete="RESTRICT"), nullable=False)
     status: Mapped[str] = mapped_column(String(24), default="active", nullable=False)
     next_sequence_number: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    trace_head_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    trace_retention_days: Mapped[int] = mapped_column(Integer, default=30, nullable=False)
+    trace_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=lambda: utcnow() + timedelta(days=30), nullable=True)
+    trace_purged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     user_message_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     model_configuration: Mapped[dict] = mapped_column(JSON, nullable=False)
     runtime_profile: Mapped[str] = mapped_column(String(32), default="mock", nullable=False)

@@ -5,11 +5,12 @@ import json
 import os
 import stat
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import Field, JsonValue, field_validator, model_validator
+from pydantic import Field, JsonValue, StrictInt, TypeAdapter, field_validator, model_validator
 
 from praxioj.core import DomainModel, Identifier, Version
+from praxioj.tracing import EventType
 
 MAX_MANIFEST_BYTES = 1_048_576
 
@@ -61,6 +62,70 @@ class CriterionDefinition(DomainModel):
     config: dict[str, JsonValue] = Field(default_factory=dict)
 
 
+class FinalTextCriterion(DomainModel):
+    kind: Literal["final_text"]
+    required_terms: list[str] = Field(min_length=1, max_length=100)
+
+    @field_validator("required_terms")
+    @classmethod
+    def bounded_terms(cls, terms):
+        if any(not term.strip() or len(term) > 500 for term in terms):
+            raise ValueError("Terms must be nonempty and at most 500 characters")
+        return terms
+
+
+class ArtifactCriterion(DomainModel):
+    kind: Literal["artifact"]
+    name: str = Field(min_length=1, max_length=128, pattern=r"^[^/\\]+$")
+    sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+
+
+class EventCriterion(DomainModel):
+    kind: Literal["event"]
+    event_type: EventType
+    min_count: StrictInt = Field(default=1, ge=1, le=10_000)
+    actor: Identifier | None = None
+    event_name: Identifier | None = None
+
+    @model_validator(mode="after")
+    def named_event(self):
+        if self.event_name is not None and self.event_type != EventType.AUTHOR_EVENT:
+            raise ValueError("event_name requires an AUTHOR_EVENT")
+        return self
+
+
+class ToolSuccessCriterion(DomainModel):
+    kind: Literal["tool_success"]
+    name: Identifier
+    min_count: StrictInt = Field(default=1, ge=1, le=100)
+
+
+UsageMetric = Literal["user_messages", "model_calls", "tool_calls", "input_tokens", "output_tokens", "total_tokens"]
+
+
+class UsageLimitCriterion(DomainModel):
+    kind: Literal["usage_limit"]
+    metric: UsageMetric
+    maximum: StrictInt = Field(ge=0, le=100_000_000)
+
+
+class ConstraintsCriterion(DomainModel):
+    kind: Literal["constraints"]
+    rule: Literal["no_denied_tools", "no_runtime_errors", "allowed_tools_only"]
+
+
+EvidenceCriterion = Annotated[
+    FinalTextCriterion | ArtifactCriterion | EventCriterion | ToolSuccessCriterion | UsageLimitCriterion | ConstraintsCriterion,
+    Field(discriminator="kind"),
+]
+_EVIDENCE_CRITERION = TypeAdapter(EvidenceCriterion)
+
+
+def evidence_criterion(config: dict) -> EvidenceCriterion:
+    """Validate a finite declarative rule; never evaluate expressions or code."""
+    return _EVIDENCE_CRITERION.validate_python(config)
+
+
 class EvaluationSpecification(DomainModel):
     evaluator_id: Identifier
     evaluator_version: Version
@@ -81,11 +146,14 @@ class EvaluationSpecification(DomainModel):
                     for term in terms
                 ):
                     raise ValueError("Text rubric requires 1–100 nonempty terms, up to 500 characters each")
+        if self.evaluator_id == "builtin.evidence-rubric":
+            for criterion in self.criteria:
+                evidence_criterion(criterion.config)
         return self
 
 
 class ProblemManifest(DomainModel):
-    schema_version: Literal["1.0", "1.1"] = "1.0"
+    schema_version: Literal["1.0", "1.1", "1.2"] = "1.0"
     id: Identifier
     version: Version
     title: str = Field(min_length=1, max_length=200)
@@ -100,6 +168,7 @@ class ProblemManifest(DomainModel):
     resource_limits: ResourceLimits = Field(default_factory=ResourceLimits)
     submission: SubmissionSpecification
     evaluation: EvaluationSpecification
+    trace_retention_days: StrictInt | None = Field(default=None, ge=1, le=90)
 
     @model_validator(mode="after")
     def unique_resources(self) -> "ProblemManifest":
@@ -150,6 +219,10 @@ def load_problem_package(directory: str | Path) -> ProblemManifest:
 
 def manifest_digest(manifest: ProblemManifest) -> str:
     data = manifest.model_dump(mode="json")
+    # An unspecified new retention policy must not change immutable M1/M2 hashes.
+    # Explicit policy changes remain part of the immutable manifest identity.
+    if manifest.trace_retention_days is None:
+        data.pop("trace_retention_days")
     if manifest.schema_version == "1.0":
         # M1 registry immutability relies on its historical canonical representation.
         # Added defaults do not change an unchanged manifest's identity. Non-default
@@ -180,6 +253,7 @@ def public_problem(manifest: ProblemManifest) -> dict:
         "ai_policy": manifest.ai_policy.model_dump(mode="json"),
         "tool_permissions": list(manifest.tool_permissions),
         "resource_limits": manifest.resource_limits.model_dump(mode="json"),
+        "trace_retention_days": manifest.trace_retention_days,
         "submission": manifest.submission.model_dump(mode="json"),
         "evaluation": {
             "evaluator_id": manifest.evaluation.evaluator_id,

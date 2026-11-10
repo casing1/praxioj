@@ -74,6 +74,7 @@ export interface Run {
   error: { code: string; message: string } | null;
   created_at: string;
   finished_at: string | null;
+  job?: { state: "PENDING" | "RUNNING" | "COMPLETED" | "FAILED" | "CANCELLED"; attempt: number; recovery_reason: string | null; external_effect_uncertain: boolean } | null;
 }
 
 export interface SessionUsage {
@@ -123,7 +124,7 @@ export interface SubmissionResponse {
   evaluation_id: string;
 }
 export interface EvidenceReference {
-  kind: "submission" | "trace" | "artifact";
+  kind: "submission" | "trace" | "artifact" | "usage";
   reference: string;
 }
 
@@ -141,7 +142,9 @@ export interface EvaluationResult {
     title: string;
     score: number | null;
     maximum_score: number | null;
-    passed: boolean;
+    passed: boolean | null;
+    status?: "completed" | "failed" | "unsupported";
+    evaluator_version?: string | null;
     feedback: string;
     evidence: EvidenceReference[];
   }[];
@@ -149,6 +152,8 @@ export interface EvaluationResult {
   evidence: EvidenceReference[];
   evaluator_id: string;
   evaluator_version: string;
+  trace_availability?: "available" | "expired" | "unavailable";
+  trace_integrity?: { status: string; reason: string | null; event_count: number; head_hash: string | null } | null;
 }
 
 export interface TraceEvent {
@@ -164,4 +169,6 @@ export interface TraceEvent {
   resource_ids: Record<string, string>;
   correlation_id?: string | null;
   parent_event_id?: string | null;
+  previous_hash?: string | null;
+  event_hash?: string | null;
 }
