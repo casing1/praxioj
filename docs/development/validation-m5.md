@@ -134,7 +134,7 @@ Reproduce with `.venv/bin/python scripts/benchmark-judge-mock.py` and `.venv/bin
 
 README now explains the actual M5 interfaces, fixed Mock role, safe default, executable standalone example, local smoke commands and M6 prerequisites. SECURITY records new invariants/reportable boundaries without weakening exclusions. Architecture, protocol, capability/artifact rules, quota/lifecycle integration, setup, data governance, backup revision and roadmap are consistent. Apache-2.0, Copyright 2026 DoHyun Choi and contributor/third-party rights remain intact.
 
-The feature PR will carry exact final CI/CodeQL links, its verified head, protected squash commit and post-merge main checks. One coherent integration PR with focused commits avoids merging a broken cross-dependent protocol/Broker/schema slice. Main protection, scanner settings and check names remain active; no bypass, force push or direct main push is used. Integration is complete only after required checks pass and the PR merges. Final identifiers are maintained in the PR delivery record rather than embedded as a self-referential commit hash here.
+Delivery is tracked in [PR #15](https://github.com/casing1/praxioj/pull/15). Its final delivery section carries exact CI/CodeQL links, the verified head, protected squash commit and post-merge main checks. One coherent integration PR with focused commits avoids merging a broken cross-dependent protocol/Broker/schema slice. Main protection, scanner settings and check names remain active; no bypass, force push or direct main push is used. Integration is complete only after required checks pass and the PR merges. Final identifiers are maintained in the PR delivery record rather than embedded as a self-referential commit hash here.
 
 ## F. Next milestone
 
