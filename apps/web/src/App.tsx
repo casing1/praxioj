@@ -4,10 +4,13 @@ import { ProblemList } from "./pages/ProblemList";
 import { ProblemDetail } from "./pages/ProblemDetail";
 import { Workspace } from "./pages/Workspace";
 import { Evaluation } from "./pages/Evaluation";
-import { Badge, Spark } from "./components/ui";
+import { Badge, ErrorNotice, Spark } from "./components/ui";
+import { AuthenticationForm, AuthLoading, useAuthentication } from "./auth";
+import { AuthorTools } from "./pages/AuthorTools";
 
 export function App() {
   const route = useRoute();
+  const authentication = useAuthentication();
   const routeName =
     route.page === "session"
       ? "AI workspace"
@@ -15,7 +18,7 @@ export function App() {
         ? "Evaluation result"
         : route.page === "problem"
           ? "Problem overview"
-          : "Problem library";
+          : route.page === "author" ? "Author tools" : "Problem library";
   useEffect(() => {
     document.title = `${routeName} · PraxiOJ`;
     document.getElementById("main-content")?.focus({ preventScroll: true });
@@ -55,6 +58,7 @@ export function App() {
             <ArrowSmall />
           </a>
         </nav>
+        {authentication.auth && authentication.auth.user.role !== "participant" ? <a className="sidebar-link" href="#/author">Author tools</a> : null}
         <div className="sidebar-bottom">
           <span className="sidebar-symbol">
             <Spark />
@@ -62,7 +66,7 @@ export function App() {
           <h2>People. AI. Possibility.</h2>
           <p>An open-source framework for evaluating human–AI collaboration.</p>
           <div className="sidebar-version">
-            <span className="status-dot" /> AI Workspace · Milestone 2
+            <span className="status-dot" /> Secure Foundation · Milestone 3
           </div>
         </div>
       </aside>
@@ -73,6 +77,7 @@ export function App() {
             <span aria-hidden="true">/</span>
             <strong>{routeName}</strong>
           </div>
+          {authentication.auth ? <div className="account-controls"><span>{authentication.auth.user.username} · {authentication.auth.user.role}</span><button className="button small secondary" onClick={() => void authentication.logout()}>Sign out</button></div> : null}
           <Badge tone="local">
             <span className="status-dot" />
             Local development
@@ -84,7 +89,7 @@ export function App() {
           className={`main-content ${route.page === "session" ? "workspace-main" : ""}`}
           tabIndex={-1}
         >
-          {route.page === "problems" ? (
+          {authentication.loading ? <AuthLoading /> : authentication.error ? <ErrorNotice message={authentication.error} retry={authentication.retry} /> : !authentication.auth ? <AuthenticationForm onSuccess={authentication.accept} expired={authentication.expired} /> : route.page === "author" ? <AuthorTools user={authentication.auth.user} /> : route.page === "problems" ? (
             <ProblemList />
           ) : route.page === "problem" ? (
             <ProblemDetail
@@ -107,7 +112,7 @@ export function App() {
         </main>
         <footer className="footer">
           <span>PraxiOJ · AI-Assisted Online Judge Framework</span>
-          <span>Independent hobby project · Browser-local identity</span>
+          <span>Independent hobby project · Local development preview</span>
           <span>
             <a href="/LICENSE.txt" target="_blank" rel="noopener noreferrer">Apache-2.0</a>
             {" · "}

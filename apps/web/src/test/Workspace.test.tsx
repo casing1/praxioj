@@ -21,6 +21,7 @@ function workspaceApi({ running = false, tools = false, uncertain = false, uncer
   let currentRun: Run | null = null;
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = String(input);
+    if (path === "/api/auth/me") return response({ user: { id: "user-1", username: "participant", role: "participant" }, csrf_token: "synthetic-csrf", expires_at: new Date(Date.now() + 3600000).toISOString() });
     if (path === "/api/problems") return response([task]);
     if (path.startsWith("/api/problems/")) return response(task);
     if (path === "/api/runtime/options") return response(options);
@@ -258,9 +259,12 @@ describe("Milestone 2 workspace", () => {
       const run = api.getRun()!;
       run.status = "failed";
       run.error = { code: "provider_timeout", message: "Provider request timed out." };
+      run.job = { state: "FAILED", attempt: 1, recovery_reason: "lease_expired", external_effect_uncertain: true };
       api.saved.active_run_id = null;
     });
     expect(await screen.findByText(/Provider request timed out/)).toBeVisible();
+    expect(screen.getByText(/This request was not automatically replayed/)).toBeVisible();
+    expect(screen.getByText(/provider may have processed the interrupted request/)).toBeVisible();
     await user.click(screen.getByRole("button", { name: "Use last message again" }));
     expect(screen.getByRole("textbox", { name: "Message your AI collaborator" })).toHaveValue("Help me retry");
     expect(screen.getByRole("button", { name: "Send message" })).toBeEnabled();
@@ -283,6 +287,17 @@ describe("Milestone 2 workspace", () => {
     await waitFor(() => expect(editor).toBeEnabled());
     expect(editor).toHaveValue("Unsaved local improvements");
     expect(screen.getByText("Unsaved changes")).toBeVisible();
+  });
+
+  it("restores a durable pending job while its worker is offline", async () => {
+    openWorkspace();
+    const api = workspaceApi({ running: true });
+    api.saved.latest_run = { id: "pending-1", session_id: api.saved.id, request_id: "pending-request", status: "queued", error: null, created_at: api.saved.created_at, finished_at: null, job: { state: "PENDING", attempt: 0, recovery_reason: null, external_effect_uncertain: false } };
+    api.saved.active_run_id = "pending-1";
+    render(<App />);
+    expect(await screen.findByText(/Waiting for an available worker/)).toBeVisible();
+    expect(screen.getByRole("button", { name: "Send message" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Cancel response" })).toBeEnabled();
   });
 
   it("labels configured cost estimates and ends a session while preserving readable saved work", async () => {

@@ -17,6 +17,14 @@ function response(body: unknown, status = 200) {
     headers: { "Content-Type": "application/json" },
   });
 }
+// Existing participant regressions use a real auth bootstrap response; only the HTTP boundary is mocked.
+function installAuthenticatedApi(handler: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>) {
+  vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit) =>
+    String(input) === "/api/auth/me"
+      ? Promise.resolve(response({ user: { id: "user-1", username: "participant", role: "participant" }, csrf_token: "test-csrf", expires_at: new Date(Date.now() + 3600000).toISOString() }))
+      : handler(input, init));
+}
+
 function route(hash: string) {
   window.history.replaceState(null, "", hash);
 }
@@ -67,7 +75,7 @@ function installApi() {
       return response({ detail: "Unexpected route" }, 404);
     },
   );
-  vi.stubGlobal("fetch", fetchMock);
+  installAuthenticatedApi(fetchMock);
   return fetchMock;
 }
 
@@ -153,7 +161,7 @@ describe("participant workflow", () => {
         response({ detail: "Database temporarily unavailable." }, 503),
       )
       .mockResolvedValueOnce(response([problem]));
-    vi.stubGlobal("fetch", fetchMock);
+    installAuthenticatedApi(fetchMock);
     const user = userEvent.setup();
     render(<App />);
     expect(await screen.findByRole("alert")).toHaveTextContent(
@@ -169,8 +177,7 @@ describe("participant workflow", () => {
   it("retains a message and submission draft after rejected writes", async () => {
     route("#/sessions/session-123");
     const user = userEvent.setup();
-    vi.stubGlobal(
-      "fetch",
+    installAuthenticatedApi(
       vi.fn(async (input: RequestInfo | URL) => {
         const path = String(input);
         if (path === "/api/sessions/session-123") return response(session);
@@ -215,8 +222,7 @@ describe("participant workflow", () => {
   it("treats participant and AI content as text instead of HTML", async () => {
     route("#/sessions/session-123");
     const markup = '<img src=x onerror="window.hacked=true">';
-    vi.stubGlobal(
-      "fetch",
+    installAuthenticatedApi(
       vi.fn(async (input: RequestInfo | URL) =>
         String(input).endsWith("/usage") ? response(usage) :
         String(input).endsWith("/files") || String(input).endsWith("/trace") ? response([]) :
@@ -253,7 +259,7 @@ describe("participant workflow", () => {
       if (path.endsWith("/files") || path.endsWith("/trace")) return response([]);
       return response(path.startsWith("/api/problems/") ? problem : session);
     });
-    vi.stubGlobal("fetch", fetchMock);
+    installAuthenticatedApi(fetchMock);
     render(<App />);
     const editor = await screen.findByRole("textbox", {
       name: "Submission content",
@@ -286,8 +292,7 @@ describe("participant workflow", () => {
 
   it("handles missing identity/session without showing a false workspace", async () => {
     route("#/sessions/another-participant");
-    vi.stubGlobal(
-      "fetch",
+    installAuthenticatedApi(
       vi
         .fn()
         .mockResolvedValue(response({ detail: "Session not found." }, 404)),

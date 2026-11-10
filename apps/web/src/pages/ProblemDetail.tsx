@@ -166,7 +166,7 @@ export function ProblemDetail({
           </button>
           <p className="small-note">
             {profile?.id === "mock" ? "Mock uses predefined replies. " : "This server-configured model may send your messages to an external provider. "}
-            Your session is associated with this browser; it is not a production account. Do not enter secrets.
+            Saved work belongs to your signed-in account. This is a local development preview. Do not enter secrets.
           </p>
         </aside>
       </div>
