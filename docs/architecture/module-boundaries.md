@@ -7,9 +7,9 @@
 | `praxioj.runtime` | Provider contract, messages, model configuration, nullable usage, mock/compatible adapters, capabilities, deadlines | Provider secrets in the browser, tool orchestration or arbitrary execution |
 | `praxioj.tools` | Explicit trusted registry, input/output schemas, authorization policy, bounded logical file operations | Host filesystem, network requests, shell, dynamic plugin imports |
 | `praxioj.tracing` | Versioned envelope, event types, collector/query contracts, redaction, canonical hash verification | Platform session ownership decisions |
-| `praxioj.evaluation` | Input/output contracts, evidence, trusted evaluator registry and execution contract | Importing user modules, HTTP, contestant code execution |
-| `praxioj.execution` | Workspace/file/tool/resource/network/artifact lifecycle interfaces | A claimed or improvised sandbox |
-| `praxioj_api` | SQL models, account/role authorization, durable jobs, leases, atomic quotas, worker operations, retention/export/erasure and safe REST serialization | Defining author-specific task content, running untrusted code |
+| `praxioj.evaluation` | Input/output contracts, evidence, trusted evaluator registry and explicit synthetic execution-assessment adapter | Importing user modules, HTTP, contestant code execution |
+| `praxioj.execution` | Versioned pure request/result/policy/artifact contracts, bounded validation, deterministic Mock/unavailable backends and legacy workspace interfaces | A claimed or improvised sandbox |
+| `praxioj_api` | SQL models, account/role authorization, durable jobs, leases, atomic quotas, worker operations, Judge broker/capabilities, retention/export/erasure and safe REST serialization | Defining author-specific task content, running untrusted code |
 | `apps/web` | Participant interaction and rendering of API data | Secrets, evaluator configuration, authoritative scoring |
 
 ```mermaid
@@ -21,6 +21,8 @@ flowchart TD
     Tools --> Runtime
     Tools --> Core
     API --> Evaluation[praxioj.evaluation]
+    API --> Execution[praxioj.execution]
+    Evaluation --> Execution
     Evaluation --> Problems
     Evaluation --> Tracing
     Evaluation --> Core
@@ -40,3 +42,5 @@ Problem authors extend the system today through declarative, versioned manifests
 `praxioj_api.worker` is a separate trusted AI runtime process, backed by `jobs.py` and PostgreSQL. It owns leases, heartbeats, runtime orchestration and periodic retention cleanup. It does not execute contestant code. A future isolated Judge remains a separate boundary; implementing the current worker does not provide that sandbox.
 
 `quotas.py` owns transactional policy admission and reservations; nullable provider usage remains a Framework fact independent of policy accounting. `operations.py` exposes role-protected bounded views and payload-free process metrics. `maintenance.py` provides recovery/cleanup without a running AI worker. `data_governance.py` owns participant exports; `backup.py` is a trusted local operator CLI using external PostgreSQL tools, not a participant archive-import endpoint. These infrastructure decisions remain outside the Framework.
+
+`judge.py` and `judge_models.py` own the separate synthetic Judge queue, server-side opaque capability checks, current-attempt/lease/fence checks and atomic result acceptance. `judge_routes.py` is an administrator-owned fixed-fixture testing harness, not a participant execution API. The Mock accepts only a Framework request; it receives no app settings, database handle, capability token or provider credential. The broker itself remains trusted Platform code with database authority. The future isolated runner and its remote capability channel remain unavailable. See [Execution Broker](execution-broker.md) and [execution protocol](../specifications/execution-protocol.md).

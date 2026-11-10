@@ -120,6 +120,9 @@ def export_account(db, user, settings, body):
         lambda row: fields(row, "id session_id run_id status input_tokens output_tokens estimated error_code created_at finished_at"))
     writer.records("traces", rows(TraceEvent, (TraceEvent.session_id, TraceEvent.sequence_number),
                                   TraceEvent.session_id.in_(available)), lambda row: row.envelope)
+    from .judge_models import JudgeJob, judge_public
+    writer.records("judge_executions", rows(JudgeJob, (JudgeJob.session_id, JudgeJob.created_at, JudgeJob.id)),
+        lambda row: {**judge_public(row), "trace_availability": availability[row.session_id]})
     payload = writer.finish()
     audit(db, "account_exported", actor_id=user.id, resource_id=user.id,
           session_count=len(sessions), row_count=writer.rows, byte_count=len(payload))
