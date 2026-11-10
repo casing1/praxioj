@@ -1,0 +1,24 @@
+name: Feature request
+description: Propose a focused framework or platform improvement.
+title: "feat: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Use case
+      description: What problem would this solve for a problem author, participant, or maintainer?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe expected interfaces, constraints, and alternatives.
+    validations:
+      required: true
+  - type: textarea
+    id: boundaries
+    attributes:
+      label: Compatibility and security considerations
+      description: Note any changes to the Framework/Platform boundary, permissions, manifests, or trace contracts.

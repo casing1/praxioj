@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security reporting guidance
+    url: https://github.com/casing1/praxioj/security/policy
+    about: Do not disclose vulnerabilities or secrets in public issues. Read the reporting policy first.
