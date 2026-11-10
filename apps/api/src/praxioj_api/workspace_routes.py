@@ -9,6 +9,7 @@ from .security import require_user
 from .services import active, append_trace, manifest_for, messages_for, owned_session, run_public, session_public
 from .runs import TERMINAL, budget_code, profiles, scrub, usage_for, workspace_limits
 from .workspace import DatabaseWorkspaceStore
+from .jobs import cancel_locked, enqueue
 
 
 def install_workspace_routes(app):
@@ -65,8 +66,8 @@ def install_workspace_routes(app):
                          resource_ids={"run_id": run.id, "message_id": message.id}, correlation_id=run.id)
             append_trace(db, session, EventType.SESSION_STATE_CHANGED, {"run_status": "queued"},
                          resource_ids={"run_id": run.id}, correlation_id=run.id)
+            enqueue(db, session, run, limits.max_run_seconds)
             result = run_public(run)
-        app.state.run_manager.launch(result["id"])
         return result
 
     @app.get("/api/runs/{run_id}", response_model=RunView)
@@ -86,13 +87,10 @@ def install_workspace_routes(app):
     @app.post("/api/runs/{run_id}/cancel", response_model=RunView)
     async def cancel_run(run_id: str, request: Request):
         with app.state.session_factory.begin() as db:
-            _, run = owned_run(db, run_id, request, lock=True)
+            session, run = owned_run(db, run_id, request, lock=True)
             if run.status in TERMINAL:
                 return run_public(run)
-            run.cancel_requested = True
-        app.state.run_manager.cancel(run_id)
-        # Also covers cancellation before the task coroutine first executes.
-        app.state.run_manager.finish(run_id, "cancelled", "cancelled")
+            cancel_locked(db, session, run)
         with app.state.session_factory() as db:
             return run_public(db.get(WorkspaceRun, run_id))
 
@@ -117,6 +115,9 @@ def install_workspace_routes(app):
         with app.state.session_factory.begin() as db:
             owner = require_user(db, request)
             session = owned_session(db, session_id, owner.id, lock=True)
+            from .retention import trace_expired
+            if trace_expired(session):
+                raise HTTPException(410, "This session's trace retention period has expired")
             if session.status != "active":
                 raise HTTPException(409, "This session is closed")
             _, manifest = manifest_for(db, session)

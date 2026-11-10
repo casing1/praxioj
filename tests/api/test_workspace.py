@@ -1,5 +1,6 @@
 """M2 application tests require no credentials and never call external providers."""
 import asyncio
+from datetime import timedelta
 from hashlib import sha256
 import json
 from pathlib import Path
@@ -9,6 +10,8 @@ from uuid import uuid4
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from fastapi.testclient import TestClient
+from conftest import authenticate_client
+from worker_support import worker_thread
 import pytest
 from sqlalchemy import select
 
@@ -16,6 +19,10 @@ from praxioj.problems import ProblemManifest, load_problem_package
 from praxioj.runtime import AIRuntime, MockProvider, ProviderError, ProviderResponse, ToolCall, Usage
 from praxioj_api.main import create_app
 from praxioj_api.models import ConversationMessage, ProviderCall, SolveSession, Submission, WorkspaceRun
+from praxioj_api.models import utcnow
+from praxioj_api.job_models import Job
+from praxioj_api.jobs import JobRepository
+from praxioj_api.runs import RunManager
 from praxioj_api.registry import register_manifest
 from praxioj_api.settings import Settings
 
@@ -114,8 +121,9 @@ def test_sessions_and_new_routes_are_owner_scoped(app, client):
     wait_run(client, rid)
     second = new_session(client)
     assert all(f["path"] != "plan.txt" for f in client.get(f"/api/sessions/{second}/files").json())
-    # No second lifespan, which would represent a competing worker and recover runs.
+    # Another authenticated account cannot access this owner's workspace.
     stranger = TestClient(app, base_url="http://localhost:8000")
+    authenticate_client(stranger)
     for suffix in ["", "/files", "/usage", "/runs", "/trace"]:
         assert stranger.get(f"/api/sessions/{sid}{suffix}").status_code == 404
     assert stranger.get(f"/api/runs/{rid}").status_code == 404
@@ -216,9 +224,12 @@ def test_recovery_marks_abandoned_runs_without_replaying(app, client, session):
         rid = run.id
         row.active_run_id = rid
         db.add(ProviderCall(session_id=sid, run_id=rid))
-    app.state.run_manager.recover()
+        db.add(Job(run_id=rid, session_id=sid, state="RUNNING", max_seconds=90,
+                   worker_id="crashed-test-worker", claim_token="synthetic", fence=1, attempt=1,
+                   lease_expires_at=utcnow() - timedelta(seconds=1), deadline_at=utcnow() + timedelta(seconds=60)))
+    JobRepository(app.state.session_factory).recover()
     recovered = client.get(f"/api/runs/{rid}").json()
-    assert recovered["status"] == "failed" and recovered["error"]["code"] == "interrupted"
+    assert recovered["status"] == "failed" and recovered["error"]["code"] == "lease_expired"
     assert client.get(f"/api/sessions/{sid}").json()["active_run_id"] is None
     assert not client.get(f"/api/sessions/{sid}/usage").json()["usage_complete"]
 
@@ -266,7 +277,8 @@ def test_local_http_provider_tool_loop_context_prices_and_redaction(database_url
         wire_reply({"role": "assistant", "content": "Saved synthetic-local-test-credential"}, {"prompt_tokens": 40, "completion_tokens": 5}),
         wire_reply({"role": "assistant", "content": "Follow up"}),
     ])
-    with TestClient(app, base_url="http://localhost:8000") as client:
+    with worker_thread(app), TestClient(app, base_url="http://localhost:8000") as client:
+        authenticate_client(client)
         options = client.get("/api/runtime/options").json()
         assert len(options["profiles"]) == 2 and url not in json.dumps(options)
         sid = new_session(client, runtime_profile="compatible")
@@ -313,20 +325,21 @@ def test_denied_tool_limit_preserves_tool_history_and_traces(app, client):
 
 
 def test_background_persistence_failure_never_logs_exception_content(app, client, session, monkeypatch, caplog):
-    original = app.state.run_manager.finish
+    original = RunManager.finish
     def failing_finish(*_args):
         raise RuntimeError("private-sql-params-and-credentials")
-    monkeypatch.setattr(app.state.run_manager, "finish", failing_finish)
+    monkeypatch.setattr(RunManager, "finish", failing_finish)
     rid = start(client, session["id"], "hello")["id"]
-    deadline = time.monotonic() + 2
-    while rid in app.state.run_manager.tasks and time.monotonic() < deadline:
+    deadline = time.monotonic() + 5
+    while "state_persistence_failed" not in caplog.text and time.monotonic() < deadline:
         time.sleep(.01)
-    assert rid not in app.state.run_manager.tasks
     assert "state_persistence_failed" in caplog.text
     assert "private-sql-params" not in caplog.text
-    monkeypatch.setattr(app.state.run_manager, "finish", original)
-    app.state.run_manager.recover()
-    assert client.get(f"/api/runs/{rid}").json()["error"]["code"] == "interrupted"
+    monkeypatch.setattr(RunManager, "finish", original)
+    with app.state.session_factory.begin() as db:
+        db.get(Job, rid).lease_expires_at = utcnow() - timedelta(seconds=1)
+    JobRepository(app.state.session_factory).recover()
+    assert client.get(f"/api/runs/{rid}").json()["error"]["code"] == "lease_expired"
 
 
 def test_elapsed_run_budget_stops_further_tool_mutations(app, client, monkeypatch):
@@ -376,7 +389,8 @@ def test_tool_ids_may_repeat_across_runs_but_never_execute_twice_within_run(data
     responses.append(tool_wire_reply("second write"))
     if not within_run:
         responses.append(wire_reply({"role": "assistant", "content": "Second run complete"}))
-    with TestClient(app, base_url="http://localhost:8000") as client:
+    with worker_thread(app), TestClient(app, base_url="http://localhost:8000") as client:
+        authenticate_client(client)
         sid = new_session(client, runtime_profile="compatible")
         first = wait_run(client, start(client, sid)["id"])
         if within_run:
@@ -405,7 +419,8 @@ def test_stopped_new_run_reused_tool_id_gets_its_own_denied_result(database_url,
     register_workspace(app, resource_limits={**data["resource_limits"], "max_tool_calls": 1})
     responses.extend([tool_wire_reply("first write"), wire_reply({"role": "assistant", "content": "Done"}),
                       tool_wire_reply("must not write")])
-    with TestClient(app, base_url="http://localhost:8000") as client:
+    with worker_thread(app), TestClient(app, base_url="http://localhost:8000") as client:
+        authenticate_client(client)
         sid = new_session(client, runtime_profile="compatible")
         assert wait_run(client, start(client, sid)["id"])["status"] == "completed"
         second = wait_run(client, start(client, sid, "again")["id"])

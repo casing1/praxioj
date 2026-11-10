@@ -4,7 +4,7 @@ import json
 
 from fastapi.testclient import TestClient
 from sqlalchemy import select
-from praxioj_api.models import ConversationMessage, Submission, User
+from praxioj_api.models import AuthSession, ConversationMessage, Submission, User
 
 
 def test_health_and_public_problem_projection(client):
@@ -24,11 +24,12 @@ def test_complete_persisted_solve_flow(client, app, session):
     session_id = session["id"]
     assert session["messages"] == [] and session["status"] == "active"
     assert client.get(f"/api/sessions/{session_id}").json() == session
-    cookie = client.cookies["praxioj_dev_identity"]
+    cookie = client.cookies["praxioj_session"]
     with app.state.session_factory() as db:
         identity = db.scalar(select(User))
-        assert identity.identity_token_hash == sha256(cookie.encode()).hexdigest()
-        assert identity.identity_token_hash != cookie
+        login = db.scalar(select(AuthSession))
+        assert login.token_hash == sha256(cookie.encode()).hexdigest()
+        assert login.token_hash != cookie and identity.identity_token_hash != login.token_hash
         assert identity.role == "participant"
     chat = client.post(f"/api/sessions/{session_id}/messages", json={"content": "Help me plan a release"})
     assert chat.status_code == 200, chat.text
@@ -57,7 +58,7 @@ def test_complete_persisted_solve_flow(client, app, session):
     ]
     assert [e["sequence_number"] for e in trace] == list(range(1, 8))
     assert len({e["event_id"] for e in trace}) == 7
-    assert all(e["source"] == "server" and e["session_id"] == session_id and e["schema_version"] == "1.0" for e in trace)
+    assert all(e["source"] == "server" and e["session_id"] == session_id and e["schema_version"] == "1.1" and e["event_hash"] for e in trace)
     assert all(datetime.fromisoformat(e["timestamp"].replace("Z", "+00:00")).tzinfo is not None for e in trace)
     assert trace[0]["payload"]["model_configuration"]["provider"] == "mock"
     assert "manifest_sha256" in trace[0]["payload"]
@@ -67,7 +68,7 @@ def test_complete_persisted_solve_flow(client, app, session):
         submission = db.get(Submission, receipt["submission_id"])
         assert submission.content == content and submission.content_sha256 == sha256(content.encode()).hexdigest()
     # A separate HTTP client with the browser's cookie reloads persisted state.
-    with TestClient(app, base_url="http://localhost:8000", cookies={"praxioj_dev_identity": cookie}) as resumed:
+    with TestClient(app, base_url="http://localhost:8000", cookies={"praxioj_session": cookie}) as resumed:
         assert resumed.get(f"/api/sessions/{session_id}").json()["evaluation_id"] == receipt["evaluation_id"]
     assert client.post(f"/api/sessions/{session_id}/submissions", json={"content": content}).status_code == 409
     assert client.post(f"/api/sessions/{session_id}/messages", json={"content": "Again"}).status_code == 409

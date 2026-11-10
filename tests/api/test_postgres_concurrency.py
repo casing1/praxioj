@@ -13,9 +13,9 @@ pytestmark = pytest.mark.skipif(
 
 def test_concurrent_messages_receive_contiguous_sequences(client, app, session):
     gate = Barrier(2)
-    cookie = client.cookies["praxioj_dev_identity"]
+    cookie = client.cookies["praxioj_session"]
     def send(content):
-        with TestClient(app, base_url="http://localhost:8000", cookies={"praxioj_dev_identity": cookie}) as worker:
+        with TestClient(app, base_url="http://localhost:8000", cookies={"praxioj_session": cookie}, headers={"X-CSRF-Token": client.headers["X-CSRF-Token"], "Origin": "http://localhost:8000"}) as worker:
             gate.wait(timeout=10)
             return worker.post(f"/api/sessions/{session['id']}/messages", json={"content": content})
     with ThreadPoolExecutor(max_workers=2) as executor:
@@ -29,9 +29,9 @@ def test_concurrent_messages_receive_contiguous_sequences(client, app, session):
 
 def test_concurrent_final_submissions_create_one_evaluation(client, app, session):
     gate = Barrier(2)
-    cookie = client.cookies["praxioj_dev_identity"]
+    cookie = client.cookies["praxioj_session"]
     def submit(_):
-        with TestClient(app, base_url="http://localhost:8000", cookies={"praxioj_dev_identity": cookie}) as worker:
+        with TestClient(app, base_url="http://localhost:8000", cookies={"praxioj_session": cookie}, headers={"X-CSRF-Token": client.headers["X-CSRF-Token"], "Origin": "http://localhost:8000"}) as worker:
             gate.wait(timeout=10)
             return worker.post(f"/api/sessions/{session['id']}/submissions", json={"content": "Goal Verification Risk"})
     with ThreadPoolExecutor(max_workers=2) as executor:
