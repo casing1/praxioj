@@ -7,6 +7,7 @@ export class ApiError extends Error {
   constructor(
     message: string,
     public status: number,
+    public retryAfter: number | null = null,
   ) {
     super(message);
     this.name = "ApiError";
@@ -53,12 +54,16 @@ export async function request<T>(
     );
   }
   const body: unknown = await response.json().catch(() => null);
-  if (response.status === 401 && !path.startsWith("/auth/")) {
+  if (response.status === 401 && !["/auth/login", "/auth/register"].includes(path)) {
     csrfToken = null;
     window.dispatchEvent(new Event("praxioj:authentication-expired"));
   }
-  if (!response.ok)
-    throw new ApiError(errorDetail(body, response.status), response.status);
+  if (!response.ok) {
+    const seconds = Number(response.headers.get("Retry-After"));
+    const retryAfter = Number.isFinite(seconds) && seconds > 0 ? Math.ceil(seconds) : null;
+    const suffix = response.status === 429 && retryAfter ? ` Try again in ${retryAfter} seconds.` : "";
+    throw new ApiError(errorDetail(body, response.status) + suffix, response.status, retryAfter);
+  }
   if (response.status === 204) return undefined as T;
   if (body === null)
     throw new ApiError(

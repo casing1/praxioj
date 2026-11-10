@@ -7,6 +7,8 @@ import { Evaluation } from "./pages/Evaluation";
 import { Badge, ErrorNotice, Spark } from "./components/ui";
 import { AuthenticationForm, AuthLoading, useAuthentication } from "./auth";
 import { AuthorTools } from "./pages/AuthorTools";
+import { Account } from "./pages/Account";
+import { Operations } from "./pages/Usage";
 
 export function App() {
   const route = useRoute();
@@ -18,7 +20,7 @@ export function App() {
         ? "Evaluation result"
         : route.page === "problem"
           ? "Problem overview"
-          : route.page === "author" ? "Author tools" : "Problem library";
+          : route.page === "author" ? "Author tools" : route.page === "account" ? "Account and data" : route.page === "operations" ? "Operations" : "Problem library";
   useEffect(() => {
     document.title = `${routeName} · PraxiOJ`;
     document.getElementById("main-content")?.focus({ preventScroll: true });
@@ -59,6 +61,8 @@ export function App() {
           </a>
         </nav>
         {authentication.auth && authentication.auth.user.role !== "participant" ? <a className="sidebar-link" href="#/author">Author tools</a> : null}
+        {authentication.auth ? <a className="sidebar-link" href="#/account">Account and data</a> : null}
+        {authentication.auth?.user.role === "administrator" ? <a className="sidebar-link" href="#/operations">Operations</a> : null}
         <div className="sidebar-bottom">
           <span className="sidebar-symbol">
             <Spark />
@@ -66,7 +70,7 @@ export function App() {
           <h2>People. AI. Possibility.</h2>
           <p>An open-source framework for evaluating human–AI collaboration.</p>
           <div className="sidebar-version">
-            <span className="status-dot" /> Secure Foundation · Milestone 3
+            <span className="status-dot" /> Operations and Data · Milestone 4
           </div>
         </div>
       </aside>
@@ -89,7 +93,7 @@ export function App() {
           className={`main-content ${route.page === "session" ? "workspace-main" : ""}`}
           tabIndex={-1}
         >
-          {authentication.loading ? <AuthLoading /> : authentication.error ? <ErrorNotice message={authentication.error} retry={authentication.retry} /> : !authentication.auth ? <AuthenticationForm onSuccess={authentication.accept} expired={authentication.expired} /> : route.page === "author" ? <AuthorTools user={authentication.auth.user} /> : route.page === "problems" ? (
+          {authentication.loading ? <AuthLoading /> : authentication.error ? <ErrorNotice message={authentication.error} retry={authentication.retry} /> : !authentication.auth ? <AuthenticationForm onSuccess={authentication.accept} expired={authentication.expired} /> : route.page === "operations" ? <Operations role={authentication.auth.user.role} /> : route.page === "account" ? <Account auth={authentication.auth} signedOut={() => authentication.accept(null)} /> : route.page === "author" ? <AuthorTools user={authentication.auth.user} /> : route.page === "problems" ? (
             <ProblemList />
           ) : route.page === "problem" ? (
             <ProblemDetail

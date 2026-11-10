@@ -12,7 +12,8 @@ describe("account UI", () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
       const path = String(input);
       if (path === "/api/auth/me") return response({ detail: "Authentication required" }, 401);
-      if (path === "/api/auth/register") return response(account(), 201);
+      if (path === "/api/auth/register") return response({ message: "If registration is available, you can now sign in with these credentials." }, 202);
+      if (path === "/api/auth/login") return response(account());
       if (path === "/api/auth/logout") return new Response(null, { status: 204 });
       if (path === "/api/problems") return response([]);
       return response({}, 404);
@@ -23,6 +24,10 @@ describe("account UI", () => {
     await user.type(screen.getByLabelText("Username"), "tester");
     await user.type(screen.getByLabelText("Password"), "synthetic-password");
     await user.click(screen.getByRole("button", { name: "Register" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("If registration is available");
+    expect(screen.queryByRole("button", { name: "Sign out" })).not.toBeInTheDocument();
+    await user.type(screen.getByLabelText("Password"), "synthetic-password");
+    await user.click(screen.getByRole("button", { name: "Sign in" }));
     expect(await screen.findByText("tester · participant")).toBeVisible();
     await user.click(screen.getByRole("button", { name: "Sign out" }));
     expect(await screen.findByRole("heading", { name: "Sign in" })).toBeVisible();
