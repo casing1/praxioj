@@ -18,7 +18,7 @@ M5는 엄격한 버전별 실행 계약, 별도의 영속 Job/Attempt 상태를 
 
 ## M6-A — 수명주기와 원격 Runner 기반
 
-[M6-A Milestone 1](https://github.com/casing1/praxioj/milestone/1)은 Issue 우선 개발 관리, DB 확인 응답에 따른 Heartbeat/Fencing, 제한된 Terminal Judge 보존·Quota 회수, 엄격한 합성 Runner 통신 경계와 실행하지 않는 Linux Preflight를 추적한다. 기능 개발 전에 [Governance PR #28](https://github.com/casing1/praxioj/pull/28)을 병합했다. 로컬 구현·검증은 [M6-A 검증](validation-m6a.md)에 기록한다. 보호 규칙에 따른 기능 전달과 최종 보안·문서 수용 검토는 실제 Issue와 필수 검사 결과를 확인할 때까지 진행 중이다. 추적 객체 생성은 완료를 의미하지 않는다.
+[M6-A Milestone 1](https://github.com/casing1/praxioj/milestone/1)은 Issue 우선 개발 관리, DB 확인 응답에 따른 Heartbeat/Fencing, 제한된 Terminal Judge 보존·Quota 회수, 엄격한 합성 Runner 통신 경계와 실행하지 않는 Linux Preflight를 제공한다. [Governance PR #28](https://github.com/casing1/praxioj/pull/28)을 [기능 PR #29](https://github.com/casing1/praxioj/pull/29)보다 먼저 병합했다. 전체 회귀, 독립 소스 검토와 보호된 기능 검사가 통과했으며 [M6-A 검증](validation-m6a.md)에 정확한 결과와 한계를 기록한다. 최종 문서와 실제 GitHub 종료 상태는 [Issue #22](https://github.com/casing1/praxioj/issues/22)에서 추적하며 실제 종료 조건을 확인한 뒤에만 Milestone을 닫는다.
 
 Judge는 기본적으로 실행 불가 상태를 유지한다. 명시적으로 선택한 Mock은 관리자 소유의 고정 Fixture와 합성 Provenance를 유지한다. Runner Channel은 메모리 내 Protocol 테스트이며, 공개 Endpoint, 운영용 Peer 인증이나 악성 코드 실행을 제공하지 않는다. 수명주기와 Runner는 하나의 권위 있는 갱신·취소 계약을 공유하므로 함께 전달한다. 최종 Milestone 검증·문서는 별도 PR로 전달한다. 새로운 주요 개발 단계는 [개발 절차](engineering-workflow.md)에 따라 실제 GitHub Milestone/Issue를 사용한다.
 

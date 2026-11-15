@@ -4,7 +4,7 @@
 
 ## 대상, Revision과 현재 상태
 
-M6-A는 Issue 기반 GitHub 관리 체계, 확인 응답을 제공하는 Judge Lease 갱신, 제한된 Terminal 기록 보존, 합성 Runner 통신 경계와 실행하지 않는 Linux 사전 점검을 구현합니다. 이 기록은 구현, 관찰한 테스트, 최적화와 전달 상태를 구분합니다. 현재 구현 단계의 기록에서는 로컬 검증과 독립적인 관리형 보안 검토를 완료했으며, 보호 규칙을 따르는 기능 PR 전달과 최종 Milestone 승인은 진행 중입니다. 최종 수용 전에 실제 결과를 기록해야 합니다. M6-B는 열린 상태이며 미구현입니다.
+M6-A는 Issue 기반 GitHub 관리 체계, 확인 응답을 제공하는 Judge Lease 갱신, 제한된 Terminal 기록 보존, 합성 Runner 통신 경계와 실행하지 않는 Linux 사전 점검을 구현합니다. 이 기록은 구현, 관찰한 테스트, 최적화와 전달 상태를 구분합니다. 구현, 전체 로컬 회귀, 독립 관리형 검토와 보호된 기능 전달을 완료했습니다. 이 기록은 실제 근거를 보존하며 최종 문서 전달과 병합 후 GitHub 종료 상태 검증은 Issue #22에서 관리합니다. M6-B는 열린 상태이며 미구현입니다.
 
 2026-11-15(Asia/Seoul) 사전 점검에서 로컬·원격 M5 main `cb05a77207a2034b0488a16f601b1ddc51026798`이 깨끗한 상태이고, 열린 PR·Issue·Milestone과 열린 Dependabot·CodeQL·Secret Scanning Alert가 모두 없음을 확인했습니다. Squash 전용 저장소 설정과 활성 main Ruleset `26909462`는 우회 담당자 없이 5개 Strict Required Checks를 유지합니다. 기존 참가자 데이터나 PostgreSQL Volume을 초기화하지 않았습니다.
 
@@ -110,7 +110,15 @@ README/CHANGELOG와 한국어 대응 문서는 Unreleased 아래 실제 Lifecycl
 
 Governance PR의 필수 [CI 43688372075](https://github.com/casing1/praxioj/actions/runs/43688372075), [CodeQL 43688372081](https://github.com/casing1/praxioj/actions/runs/43688372081), 추가 [Governance 43688397694](https://github.com/casing1/praxioj/actions/runs/43688397694)가 성공했습니다. CI에서 429 passed/1 skip, Frontend 33과 실제 API 재시작 전후 Pending Judge 영속성을 직접 확인했습니다. 병합 후 main의 CI `43688685676`, CodeQL `43688685679`, Governance `43688685696`도 성공했습니다. PR #28에는 제출된 리뷰·열린 Thread가 없었으며 독립 로컬 소스 검토와 수정은 별도로 공개합니다.
 
-M6-A를 닫기 전에 기능·최종 문서 PR 메타데이터, 필수 검사, 실제 리뷰 결과와 병합 후 Issue/Milestone 상태를 재조회하고 여기에 추가해야 합니다. 객체 생성이나 로컬 테스트만으로 이 단계를 충족하지 않습니다.
+기능 [PR #29](https://github.com/casing1/praxioj/pull/29)의 Head `fa8571538890f5f779e9555b3e5a90f506ba26c7`을 검증하고 보호 규칙에 따라 `cc57923821c1f59f55c12f37f8501fb2f6315035`로 Squash Merge했습니다. 두 Tree가 동일함을 비교했습니다. 실제 라벨, casing1 담당자, Milestone 1과 종료 연결 Issue #17–#20을 재조회했습니다. [CI 43691097829](https://github.com/casing1/praxioj/actions/runs/43691097829), [CodeQL 43691097845](https://github.com/casing1/praxioj/actions/runs/43691097845), [Governance 43691152863](https://github.com/casing1/praxioj/actions/runs/43691152863)가 성공했습니다. CI에서 155.90 s에 510 passed/1 skip, Frontend 33과 API 재시작 영속성 통과를 확인했습니다. 실제 제출 리뷰·열린 Thread는 없었으며 GitHub Codex 리뷰 제출은 관찰되지 않았습니다. 이는 별도로 봉인한 독립 소스 검토와 구분합니다.
+
+Issue #16과 구현 Issue #17–#20은 닫혔습니다. 최종 수용 Issue #21/#22는 마지막 문서 PR의 필수 검사·리뷰·메타데이터 확인 후 해당 PR을 통해 종료합니다. 필수 Issue/PR가 실제로 해결된 뒤에만 Milestone 1을 닫으며 Milestone 2와 Issue #23–#27은 Open 상태를 유지합니다. 최종 PR 전달 기록에는 검증 Head·검사·Merge Revision·병합 후 main/종료 상태 재조회가 있어 문서 안에 자신의 Commit Hash를 쓰는 순환 참조를 피합니다.
+
+기능 병합 후 main의 [CI 43691430291](https://github.com/casing1/praxioj/actions/runs/43691430291), [CodeQL 43691430223](https://github.com/casing1/praxioj/actions/runs/43691430223), [Governance 43691430268](https://github.com/casing1/praxioj/actions/runs/43691430268)도 `cc57923821c1f59f55c12f37f8501fb2f6315035`에서 성공했습니다.
+
+최종 문서 단계에서 README/CHANGELOG, 영문·국문 로드맵·상태, 링크와 근거·한계를 검토했습니다. 이 문서 전용 변경은 reviewed; no justified optimization입니다. Runtime 소스·설정·Test·Script는 독립 검토와 전체 테스트를 수행한 기능 Tree와 동일합니다. 로컬 Service를 기본 Judge Unavailable로 복원한 뒤 정상 정지하고 원래 PostgreSQL Named Volume이 남아 있음을 확인했습니다.
+
+최종 문서·수용 절차는 [PR #30](https://github.com/casing1/praxioj/pull/30)으로 전달합니다. 실제 casing1 담당자, documentation/security/testing·area:docs 라벨, Milestone 1과 Issue #21/#22 종료 연결을 적용했습니다. 해당 PR 전달 기록에서 최신 필수 검사, 실제 리뷰 상태, 보호된 Squash와 최종 GitHub 종료 재조회를 확인할 수 있습니다. 이 조건을 충족한 뒤에만 [M6-A](https://github.com/casing1/praxioj/milestone/1)를 종료하며 [M6-B](https://github.com/casing1/praxioj/milestone/2)는 Open 상태를 유지합니다.
 
 ## 알려진 한계와 M6-B 종료 작업
 

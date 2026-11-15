@@ -67,3 +67,6 @@ Governance Diff는 정책·문서·Issue/PR 템플릿과 관련 검사만 바꾸
 Squash Merge 전에 필수 CI/CodeQL과 실제 리뷰 결과를 확인한다. 최종 링크와 결과는 Governance PR 전달 기록에 남긴다. 문서 작성 시점의 원격 결과·최종 Merge 리비전은 대기 중이며 자동 Codex 리뷰를 가정하지 않는다.
 
 오프라인 링크·번역 검사는 번역 의미·외부 URL 가용성·운영 안전성을 입증하지 않는다. 이 Governance 단계에서 M6-A Runtime과 OS 수준 M6-B 격리는 미구현이다. M6-A는 필수 작업의 해결·검증까지 Open이며 M6-B는 전용 Linux 수용 시험까지 Open이다. 과거 M1–M5를 소급 완료한 Milestone·Issue는 만들지 않았다.
+
+
+최종 전달: [PR #28](https://github.com/casing1/praxioj/pull/28)은 필수 검사 성공 후 `5e47b4976e91e0310016d3dd09839efc78636da2`로 병합됐습니다. 최종 CI는 429 passed/1 skip이며 CodeQL과 추가 Governance 검사도 성공했고 Issue #16은 종료됐습니다. 이후 M6-A 구현은 별도 [PR #29](https://github.com/casing1/praxioj/pull/29)로 진행했으며 현재 제품 상태는 [M6-A 검증](validation-m6a.md)을 참고합니다. 위의 대기 표현은 작성 시점의 범위를 나타내며 현재 전달 상태가 아닙니다.
