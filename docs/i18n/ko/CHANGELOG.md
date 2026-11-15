@@ -20,6 +20,7 @@
 - 문서 목차, 설계·명세·검증·보안 검토 템플릿, 영문 원본·유지되는 한국어 번역 정책, 상호 링크와 결정적인 문서 검사를 도입한다.
 - [M6-A](https://github.com/casing1/praxioj/milestone/1)와 [M6-B](https://github.com/casing1/praxioj/milestone/2)를 별도 계획 객체로 구성한다. 비신뢰 코드 Runner를 활성화하거나 계획을 구현으로 취급하지 않는다.
 - 실측 개발 호스트 정보, 공식 Linux Runtime 전제 조건과 미검증 M6-B 격리 수용 조건을 기록한다.
+- M6-A 회귀·보안 검토·최적화·보호된 전달 근거를 영문·국문 상태와 함께 게시하고 M6-B 비목표를 명시한다.
 
 ## 과거 Milestone 기록
 

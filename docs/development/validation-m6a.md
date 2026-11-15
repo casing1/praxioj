@@ -4,7 +4,7 @@
 
 ## Target, revision and status
 
-M6-A implements issue-first GitHub governance, acknowledged Judge renewal, bounded terminal retention, a synthetic Runner communication boundary and a non-executing Linux preflight. This record distinguishes implementation, observed tests, optimization and delivery. At this implementation-stage snapshot, local validation and independent managed security review are complete; protected feature-PR delivery and final milestone sign-off are still in progress. Their observed results must be recorded before final acceptance. M6-B remains open and unimplemented.
+M6-A implements issue-first GitHub governance, acknowledged Judge renewal, bounded terminal retention, a synthetic Runner communication boundary and a non-executing Linux preflight. Implementation, full local regression, independent managed review and protected feature delivery are complete. This record preserves their actual evidence; final documentation delivery and the post-merge GitHub closure audit are governed by Issue #22. M6-B remains open and unimplemented.
 
 Preflight on 2026-11-15 (Asia/Seoul) found clean local/remote M5 main `cb05a77207a2034b0488a16f601b1ddc51026798`, no open PRs/Issues/Milestones and zero open Dependabot, CodeQL and Secret Scanning alerts. Squash-only repository settings and active main Ruleset `26909462` retain five strict required checks with no bypass actors. No existing participant data or PostgreSQL volume was reset.
 
@@ -112,7 +112,13 @@ README/CHANGELOG and their Korean counterparts describe actual lifecycle/retenti
 
 Governance PR required [CI 43688372075](https://github.com/casing1/praxioj/actions/runs/43688372075), [CodeQL 43688372081](https://github.com/casing1/praxioj/actions/runs/43688372081) and additive [Governance 43688397694](https://github.com/casing1/praxioj/actions/runs/43688397694) succeeded; CI directly recorded 429 passed/1 skip and frontend 33, plus pending Judge persistence across actual API restart. Post-merge main CI `43688685676`, CodeQL `43688685679` and Governance `43688685696` also succeeded. PR #28 had no submitted reviews/open threads; the independent local source review and fix are separately disclosed.
 
-Feature/final-document PR metadata, required checks, actual review findings and post-merge Issue/Milestone states must be re-queried and appended here before M6-A is closed. Creating objects or local tests alone does not satisfy that gate.
+Feature [PR #29](https://github.com/casing1/praxioj/pull/29) was verified at head `fa8571538890f5f779e9555b3e5a90f506ba26c7` and protected squash merged as `cc57923821c1f59f55c12f37f8501fb2f6315035`; the two trees were compared equal. Actual labels, casing1 assignment, Milestone 1 and closing Issues #17–#20 were read back. [CI 43691097829](https://github.com/casing1/praxioj/actions/runs/43691097829), [CodeQL 43691097845](https://github.com/casing1/praxioj/actions/runs/43691097845) and [Governance 43691152863](https://github.com/casing1/praxioj/actions/runs/43691152863) succeeded. CI recorded 510 passed/1 skip in 155.90 s, frontend 33 and successful API-restart persistence. Actual submitted reviews/open threads were empty; no GitHub Codex review submission was observed. This is distinct from the sealed independent source scan.
+
+Feature post-merge main [CI 43691430291](https://github.com/casing1/praxioj/actions/runs/43691430291), [CodeQL 43691430223](https://github.com/casing1/praxioj/actions/runs/43691430223) and [Governance 43691430268](https://github.com/casing1/praxioj/actions/runs/43691430268) also succeeded on `cc57923821c1f59f55c12f37f8501fb2f6315035`.
+
+Issue #16 and implementation Issues #17–#20 are closed. Final acceptance Issues #21/#22 close through the final documentation PR only after its required checks and review/metadata audit. Milestone 1 closes only after all required Issues/PRs are actually resolved; Milestone 2 and Issues #23–#27 remain open. The final PR delivery record carries its own immutable head, checks, merge revision and post-merge main/closure readback, avoiding a self-referential source commit hash in this file.
+
+The final documentation pass reviewed README/CHANGELOG, paired roadmap/status, links and evidence/limits; **reviewed; no justified optimization** for that prose-only change. Runtime source/config/tests/scripts remain identical to the independently reviewed and fully tested feature tree. Local services were restored to Judge unavailable, stopped cleanly and the original named PostgreSQL volume was verified present.
 
 ## Known limitations and M6-B exit work
 

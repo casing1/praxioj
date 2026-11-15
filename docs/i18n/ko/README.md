@@ -17,7 +17,7 @@ M6-A는 DB 확인 Heartbeat 갱신, 제한된 Dispatcher 수명주기, Terminal 
 
 M4의 계정·세션 제어, 공유 할당량, Worker 운영, 독립 유지보수, 데이터 내보내기·삭제와 격리된 PostgreSQL 복구 검증을 유지한다. AI Workspace는 Mock 및 서버 설정 OpenAI-compatible Provider, 제한된 논리 파일 Tool, Trace 무결성·보존과 예제 문제 3개를 제공한다. 기본 테스트에는 자격증명이 필요 없다.
 
-개발 순서는 **Milestone → Issue → Feature Branch → PR → Validation → Squash Merge**다. 실제 수용 조건과 전달 상태는 [M6-A](https://github.com/casing1/praxioj/milestone/1)에서 추적하며 객체 생성만으로 완료를 입증하지 않는다. [M6-B Linux 격리 검증](https://github.com/casing1/praxioj/milestone/2)은 실제 호스트 격리 검증까지 별도 Open 상태로 유지한다.
+개발 순서는 **Milestone → Issue → Feature Branch → PR → Validation → Squash Merge**다. [M6-A 검증](development/validation-m6a.md)에 테스트한 기반·독립 검토·보호된 전달을 기록한다. 실제 Issue/Milestone 상태는 [M6-A](https://github.com/casing1/praxioj/milestone/1)에서 추적하며 객체 생성만으로 완료를 입증하지 않는다. [M6-B Linux 격리 검증](https://github.com/casing1/praxioj/milestone/2)은 실제 호스트 격리 검증까지 별도 Open 상태로 유지한다.
 
 > 개발 미리보기이며 localhost에서만 사용한다. 계정 세션과 역할 검사는 구현되어 있지만 운영 환경 보안 강화와 공개 배포 지원을 입증하지 않았다. 비밀정보나 민감한 개인정보를 입력하지 않는다.
 

@@ -20,6 +20,7 @@ User-relevant changes follow [Keep a Changelog](https://keepachangelog.com/en/1.
 - Add a documentation index, design/specification/validation/security-review templates, and an English canonical/Korean maintained translation policy with reciprocal links and deterministic documentation checks.
 - Establish separate [M6-A](https://github.com/casing1/praxioj/milestone/1) and [M6-B](https://github.com/casing1/praxioj/milestone/2) planning objects without enabling an untrusted-code runner or treating planned work as implemented.
 - Record measured development-host facts, official Linux runtime prerequisites and the unverified M6-B isolation acceptance requirements.
+- Publish M6-A regression, security-review, optimization and protected-delivery evidence with synchronized English/Korean status; retain explicit M6-B non-goals.
 
 ## Historical milestone records
 

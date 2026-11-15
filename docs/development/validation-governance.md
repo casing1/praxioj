@@ -67,3 +67,6 @@ Reviewed; no justified optimization to the product Runtime. The change has no pr
 Required CI/CodeQL and any actual review findings must be inspected before squash merge. Their final links and results belong in the governance PR's delivery record. At document preparation, remote results and the final merge revision are pending; no automatic Codex review is assumed.
 
 Offline link/translation checks cannot establish semantic translation quality, external URL availability or production safety. M6-A Runtime features and OS-level M6-B isolation remain unimplemented at this governance stage. M6-A stays open until all mandatory work is resolved and verified; M6-B stays open pending dedicated Linux acceptance. No historical M1–M5 Milestones/Issues were backfilled as completed objects.
+
+
+Final delivery: [PR #28](https://github.com/casing1/praxioj/pull/28) merged as `5e47b4976e91e0310016d3dd09839efc78636da2` after all required checks. Its final CI recorded 429 passed/1 skip; CodeQL and additive Governance checks passed. Issue #16 closed. M6-A implementation then proceeded separately in [PR #29](https://github.com/casing1/praxioj/pull/29); see [M6-A validation](validation-m6a.md) for current product status. The pending wording above describes preparation-time scope, not current delivery.

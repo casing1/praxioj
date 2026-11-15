@@ -17,7 +17,7 @@ M6-A extends that foundation with database-acknowledged heartbeat renewal, bound
 
 M4 account/session controls, shared quotas, worker operations, maintenance, data export/deletion and verified quarantined PostgreSQL restore remain supported. The AI Workspace retains Mock and server-configured OpenAI-compatible providers, bounded logical file tools, Trace integrity/retention and three sample problems. No credentials are needed for normal tests.
 
-Development follows **Milestone → Issue → Feature Branch → PR → Validation → Squash Merge**. Actual acceptance and delivery are tracked in [M6-A](https://github.com/casing1/praxioj/milestone/1); creating tracking objects does not establish completion. [M6-B isolated Linux validation](https://github.com/casing1/praxioj/milestone/2) remains separate and open until actual host isolation is verified.
+Development follows **Milestone → Issue → Feature Branch → PR → Validation → Squash Merge**. [M6-A validation](docs/development/validation-m6a.md) records the tested foundation, independent review and protected delivery. Actual Issue/Milestone states are tracked in [M6-A](https://github.com/casing1/praxioj/milestone/1); creating tracking objects does not establish completion. [M6-B isolated Linux validation](https://github.com/casing1/praxioj/milestone/2) remains separate and open until actual host isolation is verified.
 
 > Development preview only. Keep it on localhost. Account sessions and role checks are implemented, but production hardening and public deployment support are not established. Do not enter secrets or sensitive personal data.
 
