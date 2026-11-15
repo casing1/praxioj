@@ -8,7 +8,7 @@ This record covers [Issue #23 — Dedicated Linux host and runtime provenance](h
 
 **Actual runtime selection: Blocked.** The maintainer confirmed that no dedicated Linux execution host is available for this task. Firecracker and gVisor are **Provisional candidates**, with no execution approval. This documentation can be delivered independently, but Issue #23 and M6-B must remain **Open** until actual required host evidence exists. M6-B isolation acceptance A4–A12 is not established by this work.
 
-No product runtime, database schema, execution contract, default backend or dependency is changed. No Linux host was provisioned or contacted; no SSH secrets or complete process environment was inspected. This local preflight performed no `sudo`, runtime installation, candidate-runtime VM/container workload, firewall/virtualization change, public listener or untrusted code execution. Default Judge selection remains unavailable, and Mock output remains synthetic.
+No product runtime, database schema, execution contract, default backend or dependency is changed. No dedicated execution host was provisioned or contacted; no SSH secrets or complete process environment was inspected. This local preflight performed no `sudo`, runtime installation, candidate-runtime VM/container workload, firewall/virtualization change, public listener or untrusted code execution. Trusted repository CI is recorded separately below. Default Judge selection remains unavailable, and Mock output remains synthetic.
 
 ## Revision, environment and baseline
 
@@ -71,7 +71,7 @@ Minimum host capacity must follow declared job budgets plus measured runtime/col
 | Frontend tests / TypeScript / Vite | **33 passed; 3.27 s**. Build passed: JS 274.37 kB / gzip 82.90 kB; CSS 31.23 kB / gzip 7.45 kB; Vite reported 92 ms. No frontend behavior changed or performance improvement is claimed. |
 | Post-change documentation links/translation pairs | Passed: 68 Markdown files; 19 registered translation pairs. Local destinations/fragments and reciprocal pairs checked offline; semantic review is separate. |
 | Dedicated Linux/KVM/runtime/OS acceptance | **Blocked / Not Tested**: no approved Linux host, runtime startup or confinement tests. |
-| Required remote CI/CodeQL/Governance | Pending PR creation and actual check receipts; not inferred from local passes. |
+| Required remote CI/CodeQL/Governance | Passed on content head `4d4660bae7de222616dba4100111b542bd02cdf5`: five required checks plus documentation/metadata and CodeQL aggregate. Exact receipts below; final-head delivery is retained in PR #31. |
 
 Focused regression command, with PostgreSQL test URLs explicitly absent:
 
@@ -83,13 +83,24 @@ The 10 skips are 3 Broker PostgreSQL claim/result, cancel/result and admission r
 
 Frontend receipts are `npm test` and `npm run build` for `apps/web`. Baseline dependency and notice receipts are `.venv/bin/python -m pip check` and `.venv/bin/python scripts/sync-licenses.py --check`; the Markdown/translation checker is `python3 scripts/check-docs.py`. Candidate source/version facts above come from the separately recorded reference investigation; the preparatory contract review and nine model assertions inspected repository source only. The later independent Firecracker source spot-check is recorded below.
 
-No live or paid provider was used. PostgreSQL-only skips are reported instead of claiming SQLite verifies row locks or worker competition. Local unit/static results do not pass A4–A12. Formal code-security scanning is not claimed for this documentation change; the actual independent work is a read-only hardening/source-contract review.
+No live or paid provider was used. PostgreSQL-only local skips are reported instead of claiming SQLite verifies row locks or worker competition. Local unit/static results do not pass A4–A12. The independent review is a read-only hardening/source-contract review, not a formal managed Codex Security scan. Required CodeQL ran separately as recorded below.
+
+### Protected CI receipts
+
+The first complete check set validates content head `4d4660bae7de222616dba4100111b542bd02cdf5`; the following documentation-only receipt update requires the same protected checks on its final head. Actual final-head checks, review/thread readback, squash SHA and post-merge Issue/Milestone states are retained in [PR #31](https://github.com/casing1/praxioj/pull/31).
+
+- [CI run 43695030208](https://github.com/casing1/praxioj/actions/runs/43695030208): Python 3.13/PostgreSQL 18 **510 passed, 1 skipped, 1 existing warning; 165.29 s**. The only skipped case is the opt-in live Provider test; no PostgreSQL-only case was skipped. Dependency consistency and license notices passed. Frontend **33 passed**, TypeScript/Vite build passed.
+- The same CI's Compose job passed M3 account/worker/tool/Trace/evaluation, M4 quota/password/export/erasure, M5 default-unavailable and explicitly synthetic Broker/replay/cancellation smoke checks. These ran on an ephemeral trusted application stack, not the absent dedicated Runner host. Local services/volume were not started or modified by CI.
+- [CodeQL run 43695030173](https://github.com/casing1/praxioj/actions/runs/43695030173): Python and JavaScript/TypeScript succeeded; aggregate CodeQL status succeeded.
+- [Governance run 43695053685](https://github.com/casing1/praxioj/actions/runs/43695053685): documentation consistency and actual PR metadata succeeded. Manual metadata checker also passed.
 
 ## Dedicated optimization and hardening
 
-An independent reviewer performed the separate post-documentation optimization/hardening pass against the canonical preflight, EN/KO validation and changed-path scope. Two precision findings were corrected: service activation gates now permit only separately approved controlled synthetic validation before final acceptance, and the static-check receipt lists exactly the nine assertions actually run. The reviewer verified both corrections and found no remaining blocking findings in that snapshot. The review preserved evidence classifications, minimum launcher authority, secret exclusion, unchanged synthetic contracts and physical-capacity quarantine. It did not perform host acceptance or a formal managed security scan; gVisor vendor-source facts rely on the primary reference investigation, since the independent spot-fetch encountered cache misses.
+An independent reviewer performed the separate post-documentation optimization/hardening pass against the canonical preflight, EN/KO validation and changed-path scope. Two precision findings were corrected: service activation gates now permit only separately approved controlled synthetic validation before final acceptance, and the static-check receipt lists exactly the nine assertions actually run. The reviewer verified both corrections and found no remaining blocking findings. Final EN/KO semantic review at `4d4660b` also confirmed all 15 pinned source references, 62 technical inline tokens (allowing translated word order) and 74 table rows agree. The review preserved evidence classifications, minimum launcher authority, secret exclusion, unchanged synthetic contracts and physical-capacity quarantine. It did not perform host acceptance or a formal managed Codex Security scan; gVisor vendor-source facts rely on the primary reference investigation, since the independent spot-fetch encountered cache misses.
 
 Conclusion: **reviewed; no justified optimization**. No runtime path, dependency, database round trip or launcher was added. Existing Broker contracts can be reused, while real transport and isolation controls need their own implementation and acceptance. No candidate-runtime performance was measured, so no efficiency or isolation-performance improvement is claimed. The pre-edit documentation/test baseline and post-edit offline checks establish regression scope, not a speed comparison.
+
+The independent Firecracker spot-check confirmed that the pinned kernel-policy table lists 4 KiB host/guest kernel lines 5.10, 6.1 and 6.18. This is upstream-source verification, not installed-host or kernel-artifact acceptance.
 
 ## Issue #23 acceptance and unresolved dependencies
 
@@ -100,12 +111,12 @@ Conclusion: **reviewed; no justified optimization**. No runtime path, dependency
 | Verified installed runtime/launcher/kernel/rootfs provenance and update owner | **Not Tested**; source pins alone are insufficient. |
 | Documented minimum privilege, credential separation, resource/cleanup owners and follow-up sequence | Documented requirements; not applied or verified host controls. |
 | Local documentation/static regression evidence | Passed within the stated local scope; independent post-document review completed with two precision corrections. Not host acceptance. |
-| Actual protected PR checks/review and metadata audit | Pending. |
+| Actual protected PR checks/review and metadata audit | Passed on content head above; independent documentation review completed. Final delivery/readback is recorded in PR #31. |
 
 **Issue #23 acceptance is not met.** A documentation-only PR may reference `Refs #23`, but must not use its merge to close the Issue or M6-B. No runtime is Selected or approved. After an explicitly approved supported host is available, resolve #23's actual provenance/prerequisites, then implement [#24 isolation/resources](https://github.com/casing1/praxioj/issues/24), [#25 network/secrets](https://github.com/casing1/praxioj/issues/25), [#26 teardown/recovery](https://github.com/casing1/praxioj/issues/26) and [#27 independent acceptance](https://github.com/casing1/praxioj/issues/27) according to their dependencies. Real execution remains unavailable until applicable OS gates and maintainer approval are actually satisfied.
 
 ## GitHub delivery and final state
 
-The existing [Issue #23](https://github.com/casing1/praxioj/issues/23) and [Milestone 2](https://github.com/casing1/praxioj/milestone/2) are reused; no duplicate tracking object or speculative due date is created. The branch is Issue-linked. PR URL, actual assignee/labels/Milestone, required-check links, review findings, protected squash result and post-merge state must be read back and recorded at delivery. At this snapshot no PR check or merge is claimed.
+The existing [Issue #23](https://github.com/casing1/praxioj/issues/23) and [Milestone 2](https://github.com/casing1/praxioj/milestone/2) are reused; no duplicate tracking object or speculative due date is created. [PR #31](https://github.com/casing1/praxioj/pull/31) uses `Refs #23`. Its actual assignee `casing1`, Milestone 2 and labels `documentation`, `enhancement`, `security`, `area:runner`, `area:docs` were applied and re-queried; the maintainer metadata checker passed. GitHub submitted reviews/inline threads were empty at the content-head inspection; no external human or configured Codex review is invented. Independent agent documentation reviews are described above. Final required checks and review state must be re-read before protected squash merging; PR #31 retains the final-head and post-merge audit rather than assuming a future merge in this source snapshot.
 
-README/CHANGELOG, primary preflight and index/translation registration are reviewed in the same delivery. Apache-2.0, contributor/third-party attribution, data preservation and localhost restrictions remain unchanged. This record's unresolved host prerequisite keeps Issue #23 and M6-B **Open**, regardless of whether the documentation PR itself is successfully merged.
+README/CHANGELOG were updated for the blocked selection and user-relevant preflight documentation; the primary preflight, roadmap, indexes and 19-pair translation manifest are synchronized. Apache-2.0, contributor/third-party attribution, data preservation and localhost restrictions remain unchanged. This record's unresolved host prerequisite keeps Issue #23 and M6-B **Open**, regardless of whether the documentation PR itself is successfully merged. The read-only pre-merge security-alert recheck found zero open Dependabot, CodeQL and Secret Scanning alerts; this is not proof that all vulnerabilities or secrets are absent.

@@ -8,7 +8,7 @@
 
 **실제 Runtime 선정: Blocked.** 유지관리자는 이번 작업에 사용할 전용 Linux 실행 호스트가 없음을 확인했습니다. Firecracker와 gVisor는 **Provisional 후보**이며 실행 승인은 없습니다. 문서는 독립적으로 전달할 수 있지만 실제 필수 호스트 근거가 확보될 때까지 Issue #23과 M6-B는 **Open** 상태를 유지해야 합니다. 이번 작업은 M6-B 격리 수용 조건 A4–A12를 충족하지 않습니다.
 
-제품 Runtime, DB Schema, 실행 계약, 기본 Backend와 의존성은 바뀌지 않습니다. Linux 호스트를 생성하거나 접속하지 않았고 SSH 비밀정보나 전체 프로세스 환경을 검사하지 않았습니다. 이번 로컬 사전 점검에서 `sudo`, Runtime 설치, 후보 Runtime의 VM/Container 작업 실행, 방화벽·가상화 변경, 공개 Listener와 비신뢰 코드 실행을 수행하지 않았습니다. 기본 Judge는 Unavailable이며 Mock 출력은 합성 결과로 유지합니다.
+제품 Runtime, DB Schema, 실행 계약, 기본 Backend와 의존성은 바뀌지 않습니다. 전용 실행 호스트를 생성하거나 접속하지 않았고 SSH 비밀정보나 전체 프로세스 환경을 검사하지 않았습니다. 이번 로컬 사전 점검에서 `sudo`, Runtime 설치, 후보 Runtime의 VM/Container 작업 실행, 방화벽·가상화 변경, 공개 Listener와 비신뢰 코드 실행을 수행하지 않았습니다. 신뢰된 저장소 CI는 아래에 별도로 기록합니다. 기본 Judge는 Unavailable이며 Mock 출력은 합성 결과로 유지합니다.
 
 ## Revision, 환경과 기준선
 
@@ -71,7 +71,7 @@ Docker VM에 들어가지 않았습니다. 기능을 찾기 위한 Privileged Co
 | Frontend Tests / TypeScript / Vite | **33 passed; 3.27 s**. Build 통과: JS 274.37 kB / gzip 82.90 kB, CSS 31.23 kB / gzip 7.45 kB, Vite 보고값 92 ms. Frontend 동작 변경이나 성능 개선 주장은 없음. |
 | 변경 후 문서 링크·번역 Pair | Markdown 68개·등록 번역 Pair 19개 검사 통과. 로컬 대상·Fragment와 상호 Pair를 오프라인으로 확인했으며 의미 검토는 별도. |
 | 전용 Linux/KVM/Runtime/OS 수용 | **Blocked / Not Tested**: 승인된 Linux 호스트, Runtime 시작과 격리 시험 없음. |
-| 필수 원격 CI/CodeQL/Governance | PR 생성·실제 실행 기록 대기, 로컬 통과에서 추론하지 않음. |
+| 필수 원격 CI/CodeQL/Governance | 본문 Head `4d4660bae7de222616dba4100111b542bd02cdf5`에서 필수 검사 5개와 문서·메타데이터·CodeQL 집계 통과. 실제 근거는 아래에 기록하며 최종 Head 전달 기록은 PR #31에 유지. |
 
 PostgreSQL 테스트 URL을 명시적으로 제외한 관련 회귀 명령:
 
@@ -83,13 +83,24 @@ Skip 10개는 Broker의 PostgreSQL Claim/Result, Cancel/Result, Admission 경쟁
 
 Frontend 실행 기록은 `apps/web`의 `npm test`와 `npm run build`입니다. 기준선 의존성과 고지 실행 기록은 `.venv/bin/python -m pip check`, `.venv/bin/python scripts/sync-licenses.py --check`이며 Markdown·번역 검사기는 `python3 scripts/check-docs.py`입니다. 위의 후보 Source/Version 사실은 별도로 기록한 참고 조사에서 가져왔습니다. 사전 계약 검토와 Model Assertion 9개는 저장소 소스만 확인했고, 이후 독립 Firecracker Source Spot-check는 아래에 기록합니다.
 
-실제·유료 Provider를 사용하지 않았습니다. PostgreSQL 전용 Skip을 보고하며 SQLite가 Row Lock·Worker 경쟁을 검증했다고 주장하지 않습니다. 로컬 Unit·정적 결과는 A4–A12를 충족하지 않습니다. 이번 문서 변경에서 정식 코드 보안 Scan을 수행했다고 주장하지 않습니다. 실제 독립 작업 범위는 읽기 전용 강화·소스 계약 검토입니다.
+실제·유료 Provider를 사용하지 않았습니다. 로컬 PostgreSQL 전용 Skip을 보고하며 SQLite가 Row Lock·Worker 경쟁을 검증했다고 주장하지 않습니다. 로컬 Unit·정적 결과는 A4–A12를 충족하지 않습니다. 독립 작업은 읽기 전용 강화·소스 계약 검토이며 공식 관리형 Codex Security Scan은 아닙니다. 필수 CodeQL은 아래 기록대로 별도 실행했습니다.
+
+### 보호된 CI 실행 근거
+
+첫 전체 검사 세트는 본문 Head `4d4660bae7de222616dba4100111b542bd02cdf5`를 검증합니다. 이후 문서 실행 근거만 갱신하는 변경의 최종 Head도 동일한 보호 검사를 통과해야 합니다. 실제 최종 Head 검사, 리뷰·Thread 재조회, Squash SHA와 병합 후 Issue/Milestone 상태는 [PR #31](https://github.com/casing1/praxioj/pull/31)에 유지합니다.
+
+- [CI Run 43695030208](https://github.com/casing1/praxioj/actions/runs/43695030208): Python 3.13/PostgreSQL 18 **510 passed, 1 skipped, 기존 경고 1개; 165.29 s**. 유일한 Skip은 명시적 선택 방식의 실제 Provider 테스트이며 PostgreSQL 전용 Case는 건너뛰지 않았습니다. 의존성 일관성과 License Notice가 통과했습니다. Frontend **33 passed**, TypeScript/Vite Build가 통과했습니다.
+- 같은 CI의 Compose Job에서 M3 계정·Worker·Tool·Trace·평가, M4 Quota·암호·내보내기·삭제, M5 기본 Unavailable 및 명시적 합성 Broker·Replay·취소 Smoke가 통과했습니다. 일회용 신뢰된 Application Stack에서 실행했으며 부재한 전용 Runner 호스트 검증이 아닙니다. CI는 로컬 서비스·Volume을 시작하거나 수정하지 않았습니다.
+- [CodeQL Run 43695030173](https://github.com/casing1/praxioj/actions/runs/43695030173): Python과 JavaScript/TypeScript 및 CodeQL 집계 상태가 통과했습니다.
+- [Governance Run 43695053685](https://github.com/casing1/praxioj/actions/runs/43695053685): 문서 일관성과 실제 PR 메타데이터가 통과했습니다. 수동 메타데이터 검사기도 통과했습니다.
 
 ## 별도 Optimization & Hardening
 
-독립 검토자가 영문 사전 점검, 영문·국문 검증 기록과 변경 경로를 대상으로 문서 작성 후 별도 최적화·강화 검토를 수행했습니다. 정확성 관련 두 사항을 수정했습니다. 최종 수용 전 별도 승인한 통제된 합성 검증만 허용하도록 서비스 활성화 조건을 명확히 했고, 정적 검사 기록에 실제 수행한 Assertion 9개만 정확히 열거했습니다. 검토자는 두 수정을 확인했으며 해당 시점에 남은 차단 사항을 발견하지 않았습니다. 근거 분류, 최소 Launcher 권한, 비밀정보 제외, 기존 합성 계약과 물리 용량 격리 원칙을 유지했습니다. 호스트 수용 시험이나 공식 관리형 보안 Scan은 수행하지 않았습니다. 독립 검토자의 gVisor Spot-fetch에서 Cache Miss가 발생했으므로 해당 Vendor 사실은 주 참조 조사에 근거합니다.
+독립 검토자가 영문 사전 점검, 영문·국문 검증 기록과 변경 경로를 대상으로 문서 작성 후 별도 최적화·강화 검토를 수행했습니다. 정확성 관련 두 사항을 수정했습니다. 최종 수용 전 별도 승인한 통제된 합성 검증만 허용하도록 서비스 활성화 조건을 명확히 했고, 정적 검사 기록에 실제 수행한 Assertion 9개만 정확히 열거했습니다. 검토자는 두 수정을 확인했으며 남은 차단 사항을 발견하지 않았습니다. `4d4660b`의 최종 영문·국문 의미 검토에서도 고정 출처 15개, 기술 인라인 Token 62개(번역 어순 허용), 표 행 74개가 일치함을 확인했습니다. 근거 분류, 최소 Launcher 권한, 비밀정보 제외, 기존 합성 계약과 물리 용량 격리 원칙을 유지했습니다. 호스트 수용 시험이나 공식 관리형 Codex Security Scan은 수행하지 않았습니다. 독립 검토자의 gVisor Spot-fetch에서 Cache Miss가 발생했으므로 해당 Vendor 사실은 주 참조 조사에 근거합니다.
 
 판단은 **reviewed; no justified optimization**입니다. Runtime 경로, 의존성, DB 왕복이나 Launcher를 추가하지 않았습니다. 기존 Broker 계약을 재사용할 수 있고 실제 Transport·격리 제어는 별도 구현·수용이 필요합니다. 후보 Runtime 성능을 측정하지 않았으므로 효율이나 격리 성능 개선을 주장하지 않습니다. 수정 전 문서·테스트 기준선과 수정 후 오프라인 검사는 회귀 범위를 입증하며 속도 비교가 아닙니다.
+
+독립 Firecracker Spot-check에서 고정한 Kernel Policy 표의 4 KiB Host/Guest Kernel 계열 5.10, 6.1, 6.18을 확인했습니다. Upstream Source 검증이며 설치된 호스트나 Kernel Artifact 수용 검증은 아닙니다.
 
 ## Issue #23 수용 조건과 미해결 의존성
 
@@ -100,12 +111,12 @@ Frontend 실행 기록은 `apps/web`의 `npm test`와 `npm run build`입니다. 
 | 설치된 Runtime/Launcher/Kernel/Rootfs 출처·Update 담당자 검증 | **Not Tested**: Source Pin만으로 불충분. |
 | 최소 권한·자격증명 분리·자원/Cleanup 담당자·후속 순서 문서화 | 문서화한 요구사항이며 적용·검증된 Host Control이 아님. |
 | 로컬 문서·정적 회귀 근거 | 명시한 로컬 범위에서 통과, 독립 문서 검토와 정확성 수정 두 건 완료. 호스트 수용 검증은 아님. |
-| 실제 보호된 PR 검사·리뷰·메타데이터 확인 | 대기 중. |
+| 실제 보호된 PR 검사·리뷰·메타데이터 확인 | 위 본문 Head에서 통과하고 독립 문서 검토 완료. 최종 전달·재조회는 PR #31에 기록. |
 
 **Issue #23 수용 조건은 충족하지 못했습니다.** 문서 전용 PR은 `Refs #23`으로 연결할 수 있지만 병합을 Issue나 M6-B 종료로 이어서는 안 됩니다. Selected 또는 승인된 Runtime은 없습니다. 명시적으로 승인된 지원 호스트가 마련되면 #23의 실제 출처·사전 조건을 해결하고, 의존성에 따라 [#24 격리·자원](https://github.com/casing1/praxioj/issues/24), [#25 네트워크·비밀정보](https://github.com/casing1/praxioj/issues/25), [#26 종료·복구](https://github.com/casing1/praxioj/issues/26), [#27 독립 수용](https://github.com/casing1/praxioj/issues/27)을 구현합니다. 적용되는 OS 수용 조건과 유지관리자 승인을 실제로 충족할 때까지 실제 실행은 Unavailable로 유지합니다.
 
 ## GitHub 전달과 최종 상태
 
-기존 [Issue #23](https://github.com/casing1/praxioj/issues/23)과 [Milestone 2](https://github.com/casing1/praxioj/milestone/2)를 재사용하며 중복 관리 객체나 추정 완료일을 만들지 않습니다. 브랜치는 Issue와 연결했습니다. PR URL, 실제 Assignee/Label/Milestone, 필수 검사 링크, 리뷰 결과, 보호 규칙을 따른 Squash 결과와 병합 후 상태는 전달 시 재조회해 기록해야 합니다. 현재 기록에서 PR 검사나 병합을 주장하지 않습니다.
+기존 [Issue #23](https://github.com/casing1/praxioj/issues/23)과 [Milestone 2](https://github.com/casing1/praxioj/milestone/2)를 재사용하며 중복 관리 객체나 추정 완료일을 만들지 않습니다. [PR #31](https://github.com/casing1/praxioj/pull/31)은 `Refs #23`을 사용합니다. 실제 Assignee `casing1`, Milestone 2와 Label `documentation`, `enhancement`, `security`, `area:runner`, `area:docs`를 적용·재조회했고 유지관리자 메타데이터 검사기가 통과했습니다. 본문 Head 확인 시 GitHub 제출 Review·Inline Thread는 없었으며 외부 사람이나 설정된 Codex Review를 꾸며내지 않습니다. 독립 Agent 문서 검토는 위에 기록했습니다. 보호된 Squash Merge 전에 최종 필수 검사·리뷰 상태를 재조회해야 하며, 이 소스 시점에서 미래 병합을 가정하는 대신 PR #31에 최종 Head·병합 후 확인 기록을 유지합니다.
 
-README/CHANGELOG, 주 사전 점검 문서와 목차·번역 등록은 같은 전달 범위에서 검토합니다. Apache-2.0, 기여자·제3자 고지, 데이터 보존과 Localhost 제한은 유지합니다. 해결하지 못한 호스트 사전 조건 때문에 문서 PR 병합 여부와 관계없이 Issue #23과 M6-B는 **Open** 상태입니다.
+README/CHANGELOG는 선정 보류와 사용자에게 필요한 사전 점검 문서를 반영하도록 갱신했고, 주 사전 점검·로드맵·목차·번역 Pair 19개의 등록을 동기화했습니다. Apache-2.0, 기여자·제3자 고지, 데이터 보존과 Localhost 제한은 유지합니다. 해결하지 못한 호스트 사전 조건 때문에 문서 PR 병합 여부와 관계없이 Issue #23과 M6-B는 **Open** 상태입니다. 읽기 전용 병합 전 보안 경고 재확인에서 열린 Dependabot·CodeQL·Secret Scanning 경고는 0개였으며 모든 취약점·비밀정보가 없다는 증명은 아닙니다.
