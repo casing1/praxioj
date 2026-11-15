@@ -120,6 +120,8 @@ Issue #16 and implementation Issues #17–#20 are closed. Final acceptance Issue
 
 The final documentation pass reviewed README/CHANGELOG, paired roadmap/status, links and evidence/limits; **reviewed; no justified optimization** for that prose-only change. Runtime source/config/tests/scripts remain identical to the independently reviewed and fully tested feature tree. Local services were restored to Judge unavailable, stopped cleanly and the original named PostgreSQL volume was verified present.
 
+Final documentation and acceptance are delivered by [PR #30](https://github.com/casing1/praxioj/pull/30), assigned to casing1 with actual documentation/security/testing and area:docs labels, Milestone 1 and closing links to Issues #21/#22. Its delivery record reports the latest required checks, actual review state, protected squash and final GitHub closure readback. [M6-A](https://github.com/casing1/praxioj/milestone/1) is closed only after those exit conditions; [M6-B](https://github.com/casing1/praxioj/milestone/2) stays open.
+
 ## Known limitations and M6-B exit work
 
 Real isolated Linux/KVM/gVisor execution, authenticated remote networking, host CPU/memory/PID/storage limits, filesystem object collection, default-deny egress, secret canary tests, runtime/image provenance acceptance and independent guest teardown/host recovery are **not implemented or validated**. The Docker VM's metadata and synthetic cleanup cannot pass those gates. M6-B Issues #23–#27 remain open.

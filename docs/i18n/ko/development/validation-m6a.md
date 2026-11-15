@@ -118,6 +118,8 @@ Issue #16과 구현 Issue #17–#20은 닫혔습니다. 최종 수용 Issue #21/
 
 최종 문서 단계에서 README/CHANGELOG, 영문·국문 로드맵·상태, 링크와 근거·한계를 검토했습니다. 이 문서 전용 변경은 reviewed; no justified optimization입니다. Runtime 소스·설정·Test·Script는 독립 검토와 전체 테스트를 수행한 기능 Tree와 동일합니다. 로컬 Service를 기본 Judge Unavailable로 복원한 뒤 정상 정지하고 원래 PostgreSQL Named Volume이 남아 있음을 확인했습니다.
 
+최종 문서·수용 절차는 [PR #30](https://github.com/casing1/praxioj/pull/30)으로 전달합니다. 실제 casing1 담당자, documentation/security/testing·area:docs 라벨, Milestone 1과 Issue #21/#22 종료 연결을 적용했습니다. 해당 PR 전달 기록에서 최신 필수 검사, 실제 리뷰 상태, 보호된 Squash와 최종 GitHub 종료 재조회를 확인할 수 있습니다. 이 조건을 충족한 뒤에만 [M6-A](https://github.com/casing1/praxioj/milestone/1)를 종료하며 [M6-B](https://github.com/casing1/praxioj/milestone/2)는 Open 상태를 유지합니다.
+
 ## 알려진 한계와 M6-B 종료 작업
 
 실제 격리 Linux/KVM/gVisor 실행, 인증된 Remote Network, 호스트 CPU/Memory/PID/Storage 제한, Filesystem Object 수집, 기본 차단 Egress, Secret Canary 검사, Runtime/Image 출처 수용과 독립 Guest 종료·호스트 복구는 **미구현·미검증**입니다. Docker VM 메타데이터와 합성 Cleanup으로 이 조건을 충족할 수 없습니다. M6-B Issue #23–#27은 열린 상태입니다.
