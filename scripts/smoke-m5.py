@@ -78,6 +78,7 @@ def main():
     else:
         assert runtime["availability"]["status"] == "available"
         pending = client.request("/internal/judge/jobs", body, status=202)
+        assert pending["evidence_status"] == "not_produced" and pending["evidence_purged_at"] is None
         assert client.request("/internal/judge/jobs", body, status=202)["id"] == pending["id"]
         if args.restart_api:
             # Trusted integration driver only; this never runs in the Mock backend.
@@ -97,6 +98,7 @@ def main():
         assert completed["state"] == "COMPLETED" and completed["provenance"] == "synthetic_mock"
         assert completed["assessment"]["independent_execution_evidence"] is False
         assert completed["assessment"]["evaluation"]["score"] == 100
+        assert completed["evidence_status"] == completed["assessment"]["evidence_status"] == "available"
         client.request(f"/internal/judge/jobs/{pending['id']}/dispatch", {}, status=409)
         cancelled = client.request("/internal/judge/jobs", {**body, "request_id": str(uuid4())}, status=202)
         assert client.request(f"/internal/judge/jobs/{cancelled['id']}/cancel", {})["state"] == "CANCELLED"
@@ -107,6 +109,7 @@ def main():
         client.request("/auth/reauthenticate", {"password": credentials["password"]})
         exported = client.request("/auth/export", {})
         assert len(exported["judge_executions"]) == 2
+        assert {row["evidence_status"] for row in exported["judge_executions"]} == {"available", "not_produced"}
         serialized = json.dumps(exported)
         assert all(name not in serialized for name in ("capability_hash", "worker_id", "request_template"))
     client.request("/auth/reauthenticate", {"password": credentials["password"]})

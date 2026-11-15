@@ -6,11 +6,20 @@ User-relevant changes follow [Keep a Changelog](https://keepachangelog.com/en/1.
 
 ## [Unreleased]
 
+### Added
+
+- Add acknowledged Judge lease renewal, a bounded synthetic dispatch heartbeat loop, and a strict in-memory Runner communication foundation without enabling a public endpoint or real code execution.
+
+### Changed
+
+- Bound terminal Judge evidence/history retention (default 7/30 days). Maintenance removes eligible payload/capability records, exposes unavailable evidence on retained assessments, and later removes summaries; original submission grades remain separate. Payload capacity recovers after purge while summary records have a separate bounded cap. Migration `0009_judge_lifecycle` preserves existing records at upgrade.
+
 ### Documentation
 
 - Introduce Issue-first GitHub development governance, matched Milestone/assignee/label metadata, detailed PR evidence, and retained protected squash merging. See [governance Issue #16](https://github.com/casing1/praxioj/issues/16).
 - Add a documentation index, design/specification/validation/security-review templates, and an English canonical/Korean maintained translation policy with reciprocal links and deterministic documentation checks.
 - Establish separate [M6-A](https://github.com/casing1/praxioj/milestone/1) and [M6-B](https://github.com/casing1/praxioj/milestone/2) planning objects without enabling an untrusted-code runner or treating planned work as implemented.
+- Record measured development-host facts, official Linux runtime prerequisites and the unverified M6-B isolation acceptance requirements.
 
 ## Historical milestone records
 

@@ -70,7 +70,7 @@ def digest_file(path):
 
 
 class PostgresBackup:
-    def __init__(self, database_url, *, container=None, timeout_seconds=120, expected_revision="0008_judge_execution"):
+    def __init__(self, database_url, *, container=None, timeout_seconds=120, expected_revision="0009_judge_lifecycle"):
         try:
             self.url = make_url(database_url)
         except Exception:

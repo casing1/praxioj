@@ -13,9 +13,11 @@ The **Framework** is an independently installable Python library for problem man
 
 Milestone 5 adds a versioned execution protocol, a separate persistent Execution Broker, single-attempt capabilities, strict result/artifact validation and a deterministic Mock Judge. The Judge defaults to unavailable. An explicit local test setting enables only administrator-owned fixed synthetic fixtures; no participant code or external evaluator runs. Accepted synthetic assessments remain separate from existing Evaluation scores and always identify their Mock provenance.
 
+M6-A extends that foundation with database-acknowledged heartbeat renewal, bounded dispatch lifecycle, terminal Judge evidence cleanup and a versioned in-memory Runner channel. By default, terminal payloads are eligible for cleanup after 7 days and safe assessment summaries after 30 days; retained assessments explicitly show unavailable evidence after payload purge. The synthetic channel exposes no public Runner endpoint or host execution. See [Judge lifecycle](docs/architecture/judge-lifecycle.md) and [Linux preflight](docs/development/linux-runner-preflight.md).
+
 M4 account/session controls, shared quotas, worker operations, maintenance, data export/deletion and verified quarantined PostgreSQL restore remain supported. The AI Workspace retains Mock and server-configured OpenAI-compatible providers, bounded logical file tools, Trace integrity/retention and three sample problems. No credentials are needed for normal tests.
 
-Development follows **Milestone → Issue → Feature Branch → PR → Validation → Squash Merge**. The [M6-A lifecycle and remote-runner foundation](https://github.com/casing1/praxioj/milestone/1) and separate [M6-B isolated Linux validation](https://github.com/casing1/praxioj/milestone/2) track upcoming work; their creation does not mark implementation complete. M5 remains the completed product baseline at this governance stage.
+Development follows **Milestone → Issue → Feature Branch → PR → Validation → Squash Merge**. Actual acceptance and delivery are tracked in [M6-A](https://github.com/casing1/praxioj/milestone/1); creating tracking objects does not establish completion. [M6-B isolated Linux validation](https://github.com/casing1/praxioj/milestone/2) remains separate and open until actual host isolation is verified.
 
 > Development preview only. Keep it on localhost. Account sessions and role checks are implemented, but production hardening and public deployment support are not established. Do not enter secrets or sensitive personal data.
 
@@ -112,7 +114,7 @@ python3 scripts/smoke-m5.py --restart-api
 docker compose up -d --wait api
 ```
 
-Only the API's fixed synthetic test harness is enabled. The Mock receives a bounded request without platform credentials and uses no host process, network, file collector or participant import. It does not establish OS isolation. An actual isolated runner remains a separately reviewed M6 task.
+Only the API's fixed synthetic test harness is enabled. The Mock receives a bounded request without platform credentials and uses no host process, network, file collector or participant import. It does not establish OS isolation. An actual isolated runner remains a separately reviewed M6-B task. Independent maintenance applies the configured Judge retention policy; TTL eligibility does not promise deletion until maintenance runs. Cleanup cannot reconstruct purged evidence, and a request UUID is remembered only while its job history remains.
 
 ## Repository
 
@@ -141,7 +143,7 @@ make install
 make test
 ```
 
-Python tests use isolated databases and local HTTP fixtures; frontend tests exercise requests and interactions with mocked HTTP responses. External provider tests require explicit opt-in and otherwise skip. PostgreSQL integration, synthetic backup/restore and full-stack smoke checks are separate checks; see the [M5 validation record](docs/development/validation-m5.md), historical [M4 validation](docs/development/validation-m4.md), historical [M3 validation](docs/development/validation-m3.md), [Preflight report](docs/development/preflight-validation.md), historical [M2 validation](docs/development/validation-m2.md) and [M1 validation](docs/development/validation.md). See [version choices](docs/development/versions.md) for dependency pins.
+Python tests use isolated databases and local HTTP fixtures; frontend tests exercise requests and interactions with mocked HTTP responses. External provider tests require explicit opt-in and otherwise skip. PostgreSQL integration, synthetic backup/restore and full-stack smoke checks are separate checks; see [M6-A validation](docs/development/validation-m6a.md), the historical [M5 validation record](docs/development/validation-m5.md), historical [M4 validation](docs/development/validation-m4.md), historical [M3 validation](docs/development/validation-m3.md), [Preflight report](docs/development/preflight-validation.md), historical [M2 validation](docs/development/validation-m2.md) and [M1 validation](docs/development/validation.md). See [version choices](docs/development/versions.md) for dependency pins.
 
 ## Design and next steps
 

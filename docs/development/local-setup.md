@@ -167,7 +167,7 @@ The M1–M3 scripts register synthetic accounts and leave their demonstration se
 
 For the credential-free compatible-provider demonstration, continue with [AI Workspace setup](ai-workspace.md).
 
-## M5 synthetic Judge validation
+## M5/M6-A synthetic Judge validation
 
 The real execution backend remains unavailable. `PRAXIOJ_JUDGE_BACKEND=mock` explicitly selects the fixed synthetic test harness; `unavailable` is the default and other values fail configuration. It accepts only administrators operating on their own fixed `release-plan` submission. Participants cannot select code, commands, evaluator modules, policy or images.
 
@@ -184,4 +184,6 @@ The script defaults to `http://127.0.0.1:8000` and container `praxioj-api-1`; ex
 
 Judge capacity has separate `PRAXIOJ_JUDGE_*` settings in `.env.example`: default 2 active and 32 retained jobs per account, 16 pending and 2 running globally, 256 retained globally, 2 MiB/16 MiB reserved output capacity per account/system and a 15-second lease. Every active job reserves 64 KiB until terminalization; these are logical admission bounds, not CPU/disk isolation or provider billing. There is one attempt per job and no automatic replay. Independent maintenance also reconciles expired Judge authority.
 
-See [protocol and capability validation](../specifications/execution-protocol.md), [Broker operations](../architecture/execution-broker.md), and [M5 validation](validation-m5.md). Linux/KVM execution, Windows behavior and OS file-object collection remain outside this milestone.
+M6-A renews the lease only while the bounded dispatcher is awaiting Mock and joins the heartbeat loop before completion. Independent maintenance also purges eligible terminal Judge payloads after 7 days and metadata after 30 days by default (`PRAXIOJ_JUDGE_RESULT_RETENTION_DAYS`, `PRAXIOJ_JUDGE_METADATA_RETENTION_DAYS`; `1 <= result <= metadata <= 90`). A retained assessment reports unavailable evidence after payload purge. All summary rows have a separate four-times retained cap. Review the policy before scheduling maintenance; it cannot recreate deleted evidence. A request UUID is remembered only while its history remains.
+
+See [protocol and capability validation](../specifications/execution-protocol.md), [Broker operations](../architecture/execution-broker.md), [Judge lifecycle](../architecture/judge-lifecycle.md), [Runner protocol](../specifications/runner-protocol.md), and [M6-A validation](validation-m6a.md). The Runner channel is an explicit in-memory test interface, with no public endpoint or network authentication. [Linux/KVM execution and actual OS isolation](linux-runner-preflight.md), Windows behavior and OS file-object collection remain outside M6-A.

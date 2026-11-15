@@ -18,6 +18,7 @@ This index covers the current implementation and retained design records. Englis
 - [Persistent AI jobs and worker lifecycle](architecture/persistent-jobs.md)
 - [Resource quotas](architecture/resource-quotas.md) and [Trace retention](architecture/trace-retention.md)
 - [Execution Broker](architecture/execution-broker.md)
+- [Judge lifecycle and evidence retention](architecture/judge-lifecycle.md)
 - [Execution foundation and future isolation proposal](architecture/sandbox-architecture.md)
 - Historical [M1 implementation contract](architecture/implementation-contract.md) and [M2 implementation contract](architecture/milestone-2-contract.md)
 
@@ -28,6 +29,7 @@ This index covers the current implementation and retained design records. Englis
 - [Trace events and integrity](specifications/trace-events.md)
 - [Evaluation contract](specifications/evaluation-contract.md)
 - [Execution protocol, capabilities and result validation](specifications/execution-protocol.md)
+- [Synthetic Runner channel and authentication boundary](specifications/runner-protocol.md)
 
 ## Development and governance
 
@@ -37,6 +39,7 @@ This index covers the current implementation and retained design records. Englis
 - [Governance foundation validation](development/validation-governance.md)
 - [Dependency and environment versions](development/versions.md)
 - [Roadmap](development/roadmap.md)
+- [Linux Runner preflight and pending M6-B host acceptance](development/linux-runner-preflight.md)
 
 ## Operations and security guides
 
@@ -50,6 +53,7 @@ The Platform remains a localhost development preview. Protocol checks, Mock test
 
 ## Validation records
 
+- [M6-A lifecycle and Runner validation](development/validation-m6a.md)
 - [M5 execution foundation](development/validation-m5.md)
 - [M4 operational controls](development/validation-m4.md)
 - [M3 platform foundation](development/validation-m3.md)
@@ -57,7 +61,7 @@ The Platform remains a localhost development preview. Protocol checks, Mock test
 - [M2 AI Workspace](development/validation-m2.md)
 - [M1 initial foundation](development/validation.md)
 
-Each report describes its own revision, environment and verified scope. Historical counts are not current test results. M6-A implementation and final validation are pending the subsequent feature PRs.
+Each report describes its own revision, environment and verified scope. Historical counts are not current test results. M6-A's report distinguishes current local evidence from pending protected delivery and final acceptance.
 
 ## Document templates
 

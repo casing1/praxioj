@@ -5,12 +5,12 @@ job and attempt before the shared admission gate. Backend calls happen only afte
 the claim transaction commits. A failed/expired attempt is never auto-replayed.
 """
 from dataclasses import dataclass, field
-from datetime import timedelta
+from datetime import datetime, timedelta
 from hashlib import sha256
 from secrets import compare_digest, token_urlsafe
 from uuid import UUID, uuid4
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, delete, func, or_, select
 
 from praxioj.execution import (FIXTURE_SUBMISSION_CONTENT, MOCK_FIXTURE_ID,
     build_mock_request, canonical_digest, parse_execution_request, request_digest)
@@ -29,8 +29,12 @@ from .services import manifest_for
 ACTIVE_STATES = ("PENDING", "RUNNING")
 TERMINAL_STATES = ("COMPLETED", "FAILED", "CANCELLED")
 RESULT_RESERVATION_BYTES = 65_536
+METADATA_LIMIT_MULTIPLIER = 4
 AUDIENCE = "mock-judge"
 OPERATION = "submit_result"
+TERMINAL_AUTHORITY_ERRORS = {"execution_authority_expired", "request_snapshot_changed",
+    "request_snapshot_invalid", "request_digest_mismatch", "trace_expired",
+    "submission_snapshot_invalid", "synthetic_fixture_required", "problem_snapshot_changed", "submission_not_final"}
 
 
 class JudgeError(Exception):
@@ -48,6 +52,17 @@ class JudgeLease:
     fence: int
     token: str = field(repr=False)
     request: object = field(repr=False)
+
+
+@dataclass(frozen=True)
+class JudgeRenewal:
+    """Server-observed lease acknowledgement; contains no reusable authority."""
+    attempt_id: str
+    fence: int
+    heartbeat_at: datetime
+    lease_expires_at: datetime
+    expires_at: datetime
+    deadline_at: datetime
 
 
 def _uuid(value):
@@ -131,8 +146,8 @@ class JudgeBroker:
         if self.settings.judge_backend != "mock":
             raise JudgeError("runtime_unavailable", 503)
 
-    def _binding(self, db, owner, session, submission, spec=None):
-        now = database_now(db)
+    def _binding(self, db, owner, session, submission, spec=None, *, now=None):
+        now = now or database_now(db)
         if trace_expired(session, now):
             raise JudgeError("trace_expired", 410)
         if session.status != "submitted" or session.active_run_id:
@@ -200,13 +215,18 @@ class JudgeBroker:
         active = db.scalar(select(func.count()).select_from(JudgeJob).where(
             JudgeJob.owner_id == owner.id, JudgeJob.state.in_(ACTIVE_STATES)))
         pending = db.scalar(select(func.count()).select_from(JudgeJob).where(JudgeJob.state == "PENDING"))
-        retained = db.execute(select(func.count(), func.count().filter(JudgeJob.owner_id == owner.id)).select_from(JudgeJob)).one()
+        retained = db.execute(select(func.count(), func.count().filter(JudgeJob.owner_id == owner.id),
+            func.count().filter(JudgeJob.evidence_purged_at.is_(None)),
+            func.count().filter(JudgeJob.owner_id == owner.id, JudgeJob.evidence_purged_at.is_(None)))
+            .select_from(JudgeJob)).one()
         reserved = db.execute(select(func.coalesce(func.sum(JudgeJob.reserved_output_bytes), 0),
             func.coalesce(func.sum(JudgeJob.reserved_output_bytes).filter(JudgeJob.owner_id == owner.id), 0))
             .where(JudgeJob.reservation_active.is_(True))).one()
         if (active >= self.settings.judge_account_active_jobs or pending >= self.settings.judge_max_pending
-            or retained[1] >= self.settings.judge_account_retained_jobs
-            or retained[0] >= self.settings.judge_system_retained_jobs
+            or retained[3] >= self.settings.judge_account_retained_jobs
+            or retained[2] >= self.settings.judge_system_retained_jobs
+            or retained[1] >= self.settings.judge_account_retained_jobs * METADATA_LIMIT_MULTIPLIER
+            or retained[0] >= self.settings.judge_system_retained_jobs * METADATA_LIMIT_MULTIPLIER
             or reserved[1] + RESULT_RESERVATION_BYTES > self.settings.judge_account_reserved_output_bytes
             or reserved[0] + RESULT_RESERVATION_BYTES > self.settings.judge_system_reserved_output_bytes):
             raise JudgeError("judge_capacity_exceeded", 429)
@@ -334,20 +354,65 @@ class JudgeBroker:
             raise
         except Exception:
             raise JudgeError("request_digest_mismatch") from None
-        self._binding(db, owner, session, submission, job.spec)
+        # Reuse this locked authorization instant; renewal and result consumption
+        # still perform a fresh DB-time check after all source/result validation.
+        self._binding(db, owner, session, submission, job.spec, now=now)
         return owner, session, submission, job, attempt, request
 
-    def heartbeat(self, lease):
+    def renew(self, lease):
+        """Renew current authority using the DB clock; invalid clients never gain time."""
         with self.factory.begin() as db:
             assert_not_restored_database(db.connection())
             try:
-                *_, attempt, request = self._authorize(db, lease)
+                owner, session, submission, job, attempt, request = self._authorize(db, lease)
+            except JudgeError as error:
+                if error.code in TERMINAL_AUTHORITY_ERRORS:
+                    *_, job, attempt = self._locked(db, lease.job_id)
+                    self._finish(db, job, attempt, "FAILED", error.code)
+                return None
+            now = database_now(db)
+            # Recheck after full source/digest validation; no client timestamp is used.
+            code = ("trace_expired" if trace_expired(session, now) else
+                "execution_authority_expired" if now >= min(aware(attempt.expires_at),
+                    aware(attempt.lease_expires_at), aware(attempt.deadline_at), aware(job.deadline_at)) else None)
+            if code:
+                self._finish(db, job, attempt, "FAILED", code)
+                return None
+            attempt.heartbeat_at = now
+            attempt.lease_expires_at = min(now + timedelta(seconds=self.settings.judge_lease_seconds),
+                aware(attempt.deadline_at), aware(attempt.expires_at))
+            return JudgeRenewal(attempt.id, attempt.fence, now, attempt.lease_expires_at,
+                aware(attempt.expires_at), aware(attempt.deadline_at))
+
+    def heartbeat(self, lease):
+        """M5-compatible boolean facade over the acknowledged renewal operation."""
+        return self.renew(lease) is not None
+
+    def cancelled(self, lease):
+        """Confirm persisted owner cancellation to a bound, still-unexpired channel.
+
+        This is a stop notification, never permission to cancel or revive a job.
+        A terminal fence, original capability and original request must all match.
+        """
+        with self.factory.begin() as db:
+            assert_not_restored_database(db.connection())
+            try:
+                owner, _, _, job, attempt = self._locked(db, lease.job_id)
+                if (not owner.is_active or owner.role != "administrator" or attempt is None
+                    or job.state != "CANCELLED" or job.error_code != "cancelled"
+                    or job.fence != lease.fence + 1 or attempt.fence != lease.fence
+                    or attempt.id != lease.attempt_id or attempt.worker_id != lease.worker_id
+                    or attempt.revoked_at is None or attempt.consumed_at is not None
+                    or aware(attempt.expires_at) <= database_now(db)
+                    or not isinstance(lease.token, str) or len(lease.token) > 128
+                    or not compare_digest(token_digest(lease.token), attempt.capability_hash)):
+                    return False
+                request = _request(job, attempt)
+                return request_digest(request) == attempt.request_digest == request_digest(lease.request)
             except JudgeError:
                 return False
-            now = database_now(db)
-            attempt.heartbeat_at = now
-            attempt.lease_expires_at = min(now + timedelta(seconds=self.settings.judge_lease_seconds), aware(attempt.deadline_at))
-            return True
+            except (TypeError, ValueError, AttributeError):
+                return False
 
     def complete(self, lease, raw_result, *, audience=AUDIENCE, operation=OPERATION):
         self._enabled()
@@ -360,9 +425,7 @@ class JudgeBroker:
                 # These errors arise only after the current opaque capability
                 # matched. Commit revocation/release, then reject outside the
                 # transaction. Invalid tokens/audiences never cancel live work.
-                if error.code not in {"execution_authority_expired", "request_snapshot_changed",
-                    "request_snapshot_invalid", "request_digest_mismatch", "trace_expired",
-                    "submission_snapshot_invalid", "synthetic_fixture_required", "problem_snapshot_changed", "submission_not_final"}:
+                if error.code not in TERMINAL_AUTHORITY_ERRORS:
                     raise
                 *_, job, attempt = self._locked(db, lease.job_id)
                 self._finish(db, job, attempt, "FAILED", error.code)
@@ -373,13 +436,23 @@ class JudgeBroker:
                 except Exception:
                     self._finish(db, job, attempt, "FAILED", "invalid_result")
                     return judge_public(job)
-                # Consume only after every authority and content check succeeds.
-                attempt.consumed_at = database_now(db)
-                job.result = result.model_dump(mode="json")
-                job.assessment = assessment.model_dump(mode="json")
-                state = "COMPLETED" if result.status == "completed" else "CANCELLED" if result.status == "cancelled" else "FAILED"
-                self._finish(db, job, attempt, state, None if state == "COMPLETED" else "synthetic_" + result.status)
-                return judge_public(job)
+                # Validation may take time. Recheck the authoritative clock at
+                # consumption, so expiry during validation cannot accept a result.
+                now = database_now(db)
+                code = ("trace_expired" if trace_expired(session, now) else
+                    "execution_authority_expired" if now >= min(aware(attempt.expires_at),
+                        aware(attempt.lease_expires_at), aware(attempt.deadline_at), aware(job.deadline_at)) else None)
+                if code:
+                    self._finish(db, job, attempt, "FAILED", code)
+                    rejection = JudgeError(code)
+                else:
+                    # Consume only after every authority and content check succeeds.
+                    attempt.consumed_at = now
+                    job.result = result.model_dump(mode="json")
+                    job.assessment = assessment.model_dump(mode="json")
+                    state = "COMPLETED" if result.status == "completed" else "CANCELLED" if result.status == "cancelled" else "FAILED"
+                    self._finish(db, job, attempt, state, None if state == "COMPLETED" else "synthetic_" + result.status)
+                    return judge_public(job)
         raise rejection
 
     def fail(self, lease, code="backend_error"):
@@ -400,6 +473,79 @@ class JudgeBroker:
         attempt = db.scalar(select(JudgeAttempt).where(JudgeAttempt.job_id == job.id).with_for_update())
         self._finish(db, job, attempt, "CANCELLED", "cancelled")
         return job
+
+    def purge_history(self, limit=100):
+        """Bounded independent maintenance; terminal evidence and metadata have separate TTLs.
+
+        A lightweight assessment tombstone survives payload removal. Its explicit
+        evidence status prevents a retained score from implying available output.
+        Original submission evaluations and Trace checkpoints are never modified.
+        """
+        limit = min(max(limit, 1), 1000)
+        counts = {"purged_judge_payloads": 0, "deleted_judge_jobs": 0,
+            "deleted_judge_attempts": 0, "reconciled_judge_reservations": 0}
+        with self.factory() as db:
+            assert_not_restored_database(db.connection())
+            now = database_now(db)
+            payload_cutoff = now - timedelta(days=self.settings.judge_result_retention_days)
+            metadata_cutoff = now - timedelta(days=self.settings.judge_metadata_retention_days)
+            ids = list(db.scalars(select(JudgeJob.id).where(JudgeJob.state.in_(TERMINAL_STATES),
+                JudgeJob.finished_at <= payload_cutoff,
+                or_(JudgeJob.evidence_purged_at.is_(None), JudgeJob.finished_at <= metadata_cutoff))
+                .order_by(JudgeJob.finished_at, JudgeJob.id).limit(limit)))
+        for job_id in ids:
+            with self.factory.begin() as db:
+                assert_not_restored_database(db.connection())
+                identity = db.execute(select(JudgeJob.owner_id, JudgeJob.session_id)
+                    .where(JudgeJob.id == job_id)).first()
+                if identity is None:
+                    continue
+                # Match admission, account erasure and result delivery lock order.
+                # Do not load the participant Submission merely to erase history.
+                owner = db.scalar(select(User).where(User.id == identity.owner_id)
+                    .with_for_update(skip_locked=True))
+                if owner is None:
+                    continue
+                session = db.scalar(select(SolveSession).where(SolveSession.id == identity.session_id,
+                    SolveSession.user_id == owner.id).with_for_update(skip_locked=True))
+                if session is None:
+                    continue
+                job = db.scalar(select(JudgeJob).where(JudgeJob.id == job_id).with_for_update()
+                    .execution_options(populate_existing=True))
+                if job is None:
+                    continue
+                attempts = list(db.scalars(select(JudgeAttempt).where(JudgeAttempt.job_id == job.id)
+                    .order_by(JudgeAttempt.id).with_for_update().execution_options(populate_existing=True)))
+                now = database_now(db)
+                if (job.state not in TERMINAL_STATES or job.finished_at is None
+                    or aware(job.finished_at) > now - timedelta(days=self.settings.judge_result_retention_days)):
+                    continue
+                # Fail closed for anomalous terminal rows with outstanding authority.
+                # Expired active jobs are terminalized by recovery, not deleted here.
+                if any(item.revoked_at is None and item.consumed_at is None
+                    and aware(item.expires_at) > now for item in attempts):
+                    continue
+                if job.reservation_active:
+                    job.reservation_active = False
+                    counts["reconciled_judge_reservations"] += 1
+                hard_delete = aware(job.finished_at) <= now - timedelta(days=self.settings.judge_metadata_retention_days)
+                if not hard_delete and job.evidence_purged_at is not None:
+                    continue
+                counts["deleted_judge_attempts"] += len(attempts)
+                db.execute(delete(JudgeAttempt).where(JudgeAttempt.job_id == job.id))
+                if hard_delete:
+                    audit(db, "judge_history_deleted", actor_id=owner.id, resource_id=job.id,
+                        deleted_attempts=len(attempts), provenance="synthetic_mock")
+                    db.delete(job)
+                    counts["deleted_judge_jobs"] += 1
+                else:
+                    job.result = None
+                    job.spec = {}
+                    job.evidence_purged_at = now
+                    audit(db, "judge_evidence_purged", actor_id=owner.id, resource_id=job.id,
+                        deleted_attempts=len(attempts), evidence_status="unavailable", provenance="synthetic_mock")
+                    counts["purged_judge_payloads"] += 1
+        return counts
 
     def recover(self, limit=100):
         limit = min(max(limit, 1), 1000)

@@ -1,5 +1,7 @@
 # Execution foundation and future isolation proposal
 
+M6-A extends the M5 source baseline below with [acknowledged heartbeat/retention](judge-lifecycle.md) and a [synthetic Runner communication contract](../specifications/runner-protocol.md). The retained host-isolation proposal remains future M6-B work; [Linux preflight](../development/linux-runner-preflight.md) records actual observations and unknowns. Neither extension activates a real execution host or passes the OS-level acceptance gates.
+
 **Status: M5 protocol/broker foundation; host isolation remains design only.** M5 adds a versioned contract, trusted synthetic broker and deterministic Mock backend. It does not enable arbitrary code, a terminal, untrusted containers or external evaluator execution. Public deployment remains unsupported. The [threat model](sandbox-threat-model.md) records current controls, effective resources, attacker stories and limitations.
 
 ## Present boundary and decision

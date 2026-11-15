@@ -20,7 +20,9 @@ def run_maintenance(factory, settings, *, limit=100):
     recovered = JobRepository(factory, lease_seconds=settings.worker_lease_seconds,
         max_running=settings.worker_max_running).recover(limit)
     from .judge import JudgeBroker
-    recovered_judge = JudgeBroker(factory, settings).recover(limit)
+    judge = JudgeBroker(factory, settings)
+    recovered_judge = judge.recover(limit)
+    judge_cleanup = judge.purge_history(limit)
     purged = purge_expired(factory, settings, limit=limit)
     with factory.begin() as db:
         now = database_now(db)
@@ -34,7 +36,7 @@ def run_maintenance(factory, settings, *, limit=100):
                 db.execute(delete(model).where(key.in_(ids)))
             counts[model.__tablename__] = len(ids)
         result = {"recovered_jobs": recovered, "recovered_judge_jobs": recovered_judge,
-            "purged_trace_sessions": purged, **counts}
+            "purged_trace_sessions": purged, **judge_cleanup, **counts}
         audit(db, "maintenance_completed", **result)
     logger.info(json.dumps({"event": "maintenance_completed", **result}, separators=(",", ":")))
     return result

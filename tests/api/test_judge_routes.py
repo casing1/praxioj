@@ -199,8 +199,9 @@ def test_quarantined_database_blocks_every_judge_authority_entrypoint(judge_app)
         with judge_app.state.session_factory.begin() as db:
             db.execute(text("CREATE TABLE praxioj_restore_quarantine (id INTEGER)"))
         for operation in (lambda: broker.claim("synthetic-quarantine-probe"),
-                lambda: broker.heartbeat(lease), lambda: broker.complete(lease, raw),
-                lambda: broker.fail(lease), lambda: broker.recover()):
+                lambda: broker.heartbeat(lease), lambda: broker.renew(lease), lambda: broker.cancelled(lease),
+                lambda: broker.complete(lease, raw), lambda: broker.fail(lease),
+                lambda: broker.recover(), lambda: broker.purge_history()):
             with pytest.raises(RuntimeError, match="quarantined"):
                 operation()
         with judge_app.state.session_factory.begin() as db:
