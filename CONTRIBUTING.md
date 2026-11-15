@@ -1,16 +1,22 @@
 # Contributing to PraxiOJ
 
+[한국어](docs/i18n/ko/CONTRIBUTING.md)
+
 PraxiOJ welcomes bug reports, documentation improvements, tests, and focused code contributions. It is an independent personal hobby open-source project maintained by DoHyun Choi, not an official university, laboratory, or company project. The project name and use of the Apache License do not imply institutional sponsorship, endorsement, or affiliation with the Apache Software Foundation.
 
 ## Start with the problem
 
-Check existing issues and pull requests before starting. For a bug report, include the expected behavior, actual behavior, relevant versions, and minimal reproduction steps. Remove credentials, participant data, and private submissions from examples and logs. For a substantial feature or architectural change, open an issue to discuss the use case and scope before investing in a large implementation. Small fixes can go directly to a pull request.
+Development follows **Milestone → Issue → Feature Branch → PR → Validation → Squash Merge**. Check existing GitHub Milestones, Issues and PRs first, reuse equivalent objects, and define an Issue before implementation. This applies to small fixes as well as major features. An Issue must state Summary, Motivation, Scope, Non-goals, measurable Acceptance Criteria, Security & Compatibility, Validation and Dependencies. For a bug, also include expected/actual behavior, relevant versions and minimal reproduction. Remove credentials, participant data and private submissions from examples and logs.
+
+Each major development stage uses a real GitHub Milestone; a Markdown heading alone is not tracking. Use titles such as `M6-A — Judge Lifecycle & Remote Runner Foundation`, `M6-B — Isolated Linux Runner Validation`, then `M7 — …`. Describe objective, scope, deliverables, acceptance criteria, dependencies, security requirements, explicit non-goals, verification and exit conditions. Do not invent due dates or retrospectively mark undocumented work complete. Close a Milestone only after all required Issues and exit conditions are verified.
+
+Maintainers apply the Issue's work type, relevant `area:*` label(s), priority and actual Milestone. Maintainer-led work defaults to assignee `casing1`; existing valid assignees and labels are preserved. External contributors and Dependabot may open PRs before this triage; maintainers supply the tracking metadata before merge, preserve authorship and never require extra write permissions merely to contribute. See the [engineering workflow](docs/development/engineering-workflow.md) for label categories and metadata verification.
 
 Read the [architecture](docs/architecture/overview.md), [module boundaries](docs/architecture/module-boundaries.md), and [roadmap](docs/development/roadmap.md). The current milestone intentionally leaves production authentication, untrusted execution, and external evaluator execution unavailable.
 
 ## Develop and validate
 
-Fork the repository and use a focused branch for each change. Follow the [local setup guide](docs/development/local-setup.md) for the supported Python, Node, Docker, and PostgreSQL versions. The root [Makefile](Makefile) provides `make install`, `make test`, `make api`, `make web`, and Compose helpers.
+Fork the repository and use a focused Issue-linked branch such as `feat/123-judge-heartbeat`; never develop directly on `main`. Use concise English Conventional Commit and PR titles: `<type>(<scope>): <summary>`, with type `feat`, `fix`, `perf`, `refactor`, `test`, `docs`, `ci`, `build` or `chore`. Follow the [local setup guide](docs/development/local-setup.md) for supported Python, Node, Docker and PostgreSQL versions. The root [Makefile](Makefile) provides `make install`, `make test`, `make api`, `make web`, and Compose helpers.
 
 Keep changes proportional to the problem and preserve these boundaries:
 
@@ -29,11 +35,15 @@ Every development cycle has explicit preflight, design/baseline, implementation,
 
 **Review `README.md` in every PR.** Update it in the same PR whenever user-visible functionality, installation, commands, configuration, architecture summary, milestone status, or limitations change. If not updated, say why in the PR. Keep the relevant contracts, roadmap, security documentation, and validation reports consistent.
 
+**Review `CHANGELOG.md` in every PR.** Record relevant user-facing behavior, compatibility and security changes under `Unreleased`; explain a no-change decision for internal-only maintenance. Do not invent releases or version tags. English is the canonical documentation language and Korean is a maintained translation. Add paired, reciprocal language links for new major technical documents, synchronize substantially changed core counterparts, and register new documents in the [documentation index](docs/README.md). Preserve code identifiers, commands and API paths. Existing untranslated documents need scoped follow-up work rather than an unrelated mass translation.
+
 Each completed milestone must include a dedicated post-implementation optimization/hardening pass and document its findings (including a justified no-op), measurement limitations, tests and risks in the milestone validation report. Do not claim performance gains without comparable baseline data.
 
 ## Submit a pull request
 
-Explain the problem, the resulting behavior, and how you verified it. Link a related issue when one exists. Include UI screenshots when they help a reviewer understand a visual change, and call out migrations, compatibility changes, or remaining limitations. Keep unrelated cleanup in a separate change.
+Use [.github/PULL_REQUEST_TEMPLATE.md](.github/PULL_REQUEST_TEMPLATE.md), including for CLI/API-created PRs. Explain the problem, resulting behavior, implementation and actual verification. Use `Closes #123` for an Issue fully resolved by the PR or `Refs #123` for partial work. Apply actual work-type and component labels, assignee and the same Milestone as the linked Issue; the PR body does not apply metadata. Re-query GitHub after creation and after relevant updates to confirm these fields. Include UI screenshots when useful and call out migrations, compatibility changes and limitations. Keep unrelated cleanup separate.
+
+Prefer a draft PR during implementation, then mark it ready after self-verification. Inspect actual required CI, CodeQL results, submitted reviews and unresolved review threads; do not assume an automatic code/security review exists. Address findings, re-run affected tests and update the PR body before merge. External/Bot metadata checks are advisory while maintainers triage; this does not waive code review or required checks. Only squash merge after every required check succeeds, without bypassing the protected `main` ruleset. Do not force push, rewrite shared history or weaken scanners. After merge, verify Issue states and Milestone progress from GitHub before reporting completion.
 
 Do not include local `.env` files, cookies, tokens, private submissions, generated databases, dependency caches, or unrelated generated files. Do include intentional dependency lockfile changes when dependencies change.
 

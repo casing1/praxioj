@@ -1,0 +1,54 @@
+# SPDX-License-Identifier: Apache-2.0
+name: Governance
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review, edited, labeled, unlabeled, milestoned, demilestoned, assigned, unassigned]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: governance-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  docs:
+    name: Documentation consistency
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check local links and reciprocal translation pairs offline
+        run: python3 scripts/check-docs.py
+
+  metadata:
+    name: PR metadata
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
+    steps:
+      - name: Checkout trusted base implementation only
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+      - name: Verify current metadata with read-only API access
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          if test -f scripts/check-pr-metadata.py; then
+            python3 scripts/check-pr-metadata.py --repository "$GITHUB_REPOSITORY" --number "$PR_NUMBER"
+          else
+            echo 'Bootstrap only: trusted base has no checker yet; maintainer must record manual metadata verification.'
+          fi
