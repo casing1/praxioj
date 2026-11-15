@@ -1,5 +1,7 @@
 # Execution-isolation threat model
 
+**Historical M5 source snapshot.** The source citations and snapshot footer below preserve that review's scope. M6-A supersedes its no-heartbeat/account-erasure-only Judge-history limitations with the [current lifecycle contract](judge-lifecycle.md), [synthetic Runner boundary](../specifications/runner-protocol.md) and [M6-A validation](../development/validation-m6a.md). Current root [SECURITY.md](../../SECURITY.md) governs implemented invariants; this retained snapshot does not assert that today's source still has the M5 limitations. Actual OS isolation remains unimplemented.
+
 ## 1. Overview
 
 This is a source-backed M5 architecture and future-isolation document for PraxiOJ, an independent personal Apache-2.0 Framework and Platform. It describes the current localhost development preview and the additional boundaries needed **before** arbitrary contestant code, packages or external evaluators could be enabled. No executable sandbox, public deployment approval or production certification is introduced.

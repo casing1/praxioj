@@ -1,7 +1,7 @@
 """Synthetic Judge coordination is separate from AI runtime jobs and evaluation."""
 from datetime import datetime
 
-from sqlalchemy import JSON, BigInteger, Boolean, CheckConstraint, DateTime, ForeignKey, Index, Integer, String, UniqueConstraint
+from sqlalchemy import JSON, BigInteger, Boolean, CheckConstraint, DateTime, ForeignKey, Index, Integer, String, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .models import Base, uid, utcnow
@@ -14,6 +14,9 @@ class JudgeJob(Base):
         CheckConstraint("state IN ('PENDING', 'RUNNING', 'COMPLETED', 'FAILED', 'CANCELLED')", name="ck_judge_job_state"),
         CheckConstraint("fence >= 0 AND reserved_output_bytes >= 0", name="ck_judge_job_budget"),
         Index("ix_judge_schedule", "state", "created_at", "id"),
+        Index("ix_judge_retention", "finished_at", "id",
+            postgresql_where=text("state IN ('COMPLETED', 'FAILED', 'CANCELLED')"),
+            sqlite_where=text("state IN ('COMPLETED', 'FAILED', 'CANCELLED')")),
     )
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
     owner_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False, index=True)
@@ -33,6 +36,7 @@ class JudgeJob(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     deadline_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    evidence_purged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class JudgeAttempt(Base):
@@ -62,8 +66,12 @@ class JudgeAttempt(Base):
 
 def judge_public(job: JudgeJob) -> dict:
     """A synthetic result is never a participant's independent execution evidence."""
+    evidence = ("unavailable" if job.evidence_purged_at is not None else
+        "available" if job.result is not None else "not_produced")
+    assessment = {**job.assessment, "evidence_status": evidence} if job.assessment is not None else None
     return {"id": job.id, "session_id": job.session_id, "submission_id": job.submission_id,
         "request_id": job.request_id, "state": job.state, "fixture_id": job.fixture_id,
         "provenance": "synthetic_mock", "error_code": job.error_code,
-        "result": job.result, "assessment": job.assessment,
+        "result": job.result, "assessment": assessment, "evidence_status": evidence,
+        "evidence_purged_at": job.evidence_purged_at,
         "created_at": job.created_at, "deadline_at": job.deadline_at, "finished_at": job.finished_at}

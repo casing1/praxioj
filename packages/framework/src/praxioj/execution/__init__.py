@@ -90,5 +90,9 @@ from .protocol import (ArtifactDeclaration, BackendCapabilities, CleanupResult, 
     canonical_json, default_mock_policy, parse_execution_request, policy_digest, request_digest,
     result_output_digest, snapshot_digest, validate_artifact_path, validate_execution_result)
 from .backends import MockJudgeBackend
+from .runner import (MockRunnerTransport, RUNNER_PROTOCOL_VERSION, RunnerBinding, RunnerCancellation,
+    RunnerCancellationAck, RunnerChannelError, RunnerDispatch, RunnerGrant, RunnerHeartbeat,
+    RunnerHeartbeatAck, RunnerIdentity, RunnerResultSubmission, RunnerRuntimeStatus,
+    parse_runner_message, runner_binding)
 
 UnavailableExecutionBackend.capabilities = BackendCapabilities(backend_id="unavailable")

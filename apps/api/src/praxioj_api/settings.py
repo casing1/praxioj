@@ -99,6 +99,8 @@ class Settings:
     judge_account_reserved_output_bytes: int = field(default_factory=lambda: int(os.getenv("PRAXIOJ_JUDGE_ACCOUNT_RESERVED_OUTPUT_BYTES", "2097152")))
     judge_system_reserved_output_bytes: int = field(default_factory=lambda: int(os.getenv("PRAXIOJ_JUDGE_SYSTEM_RESERVED_OUTPUT_BYTES", "16777216")))
     judge_lease_seconds: float = field(default_factory=lambda: float(os.getenv("PRAXIOJ_JUDGE_LEASE_SECONDS", "15")))
+    judge_result_retention_days: int = field(default_factory=lambda: int(os.getenv("PRAXIOJ_JUDGE_RESULT_RETENTION_DAYS", "7")))
+    judge_metadata_retention_days: int = field(default_factory=lambda: int(os.getenv("PRAXIOJ_JUDGE_METADATA_RETENTION_DAYS", "30")))
 
     def __post_init__(self) -> None:
         if self.judge_backend not in {"unavailable", "mock"}:
@@ -112,6 +114,9 @@ class Settings:
             raise ValueError("Judge capacity must use bounded positive integers")
         if not math.isfinite(self.judge_lease_seconds) or not 1 <= self.judge_lease_seconds <= 60:
             raise ValueError("Judge lease must be between 1 and 60 seconds")
+        if (type(self.judge_result_retention_days) is not int or type(self.judge_metadata_retention_days) is not int
+            or not 1 <= self.judge_result_retention_days <= self.judge_metadata_retention_days <= 90):
+            raise ValueError("Judge retention must use integer days: 1 <= result <= metadata <= 90")
         quota_names = ("account_active_sessions", "account_retained_sessions", "system_retained_sessions",
             "account_active_runs", "queue_max_pending", "worker_max_running", "call_token_reservation",
             "session_artifact_max_bytes", "session_trace_max_bytes", "session_trace_max_events",

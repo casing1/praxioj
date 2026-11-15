@@ -10,5 +10,11 @@
   "docs/templates/design.md": "docs/i18n/ko/templates/design.md",
   "docs/templates/specification.md": "docs/i18n/ko/templates/specification.md",
   "docs/templates/validation.md": "docs/i18n/ko/templates/validation.md",
-  "docs/templates/security-review.md": "docs/i18n/ko/templates/security-review.md"
+  "docs/templates/security-review.md": "docs/i18n/ko/templates/security-review.md",
+  "docs/development/linux-runner-preflight.md": "docs/i18n/ko/development/linux-runner-preflight.md",
+  "docs/architecture/judge-lifecycle.md": "docs/i18n/ko/architecture/judge-lifecycle.md",
+  "docs/specifications/runner-protocol.md": "docs/i18n/ko/specifications/runner-protocol.md",
+  "SECURITY.md": "docs/i18n/ko/SECURITY.md",
+  "docs/development/validation-m6a.md": "docs/i18n/ko/development/validation-m6a.md",
+  "docs/development/roadmap.md": "docs/i18n/ko/development/roadmap.md"
 }

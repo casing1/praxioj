@@ -13,9 +13,11 @@ PraxiOJ는 DoHyun Choi가 독립적으로 개발하는 개인 취미 오픈소�
 
 M5는 버전 관리 실행 프로토콜, 별도 영속 Execution Broker, 단일 Attempt Capability, 엄격한 결과·Artifact 검증과 결정적인 Mock Judge를 제공한다. 기본 Judge는 Unavailable이다. 명시적인 로컬 테스트 설정에서 관리자 소유의 고정 합성 Fixture만 활성화하며 참가자 코드나 외부 Evaluator는 실행하지 않는다. 합성 평가는 기존 Evaluation 점수와 별도로 저장하고 Mock 출처를 명시한다.
 
+M6-A는 DB 확인 Heartbeat 갱신, 제한된 Dispatcher 수명주기, Terminal Judge 증거 정리와 버전 관리 메모리 내 Runner 채널을 추가한다. 기본적으로 종료 7일 후 Payload, 30일 후 안전한 평가 Summary가 정리 대상이 되며, Payload가 삭제된 평가는 증거가 없음을 명시한다. 합성 채널에는 공개 Runner Endpoint나 호스트 실행 기능이 없다. [Judge 수명주기](architecture/judge-lifecycle.md)와 [Linux 사전 점검](development/linux-runner-preflight.md)을 참고한다.
+
 M4의 계정·세션 제어, 공유 할당량, Worker 운영, 독립 유지보수, 데이터 내보내기·삭제와 격리된 PostgreSQL 복구 검증을 유지한다. AI Workspace는 Mock 및 서버 설정 OpenAI-compatible Provider, 제한된 논리 파일 Tool, Trace 무결성·보존과 예제 문제 3개를 제공한다. 기본 테스트에는 자격증명이 필요 없다.
 
-개발 순서는 **Milestone → Issue → Feature Branch → PR → Validation → Squash Merge**다. [M6-A 수명주기·원격 Runner 기반](https://github.com/casing1/praxioj/milestone/1)과 별도의 [M6-B Linux 격리 검증](https://github.com/casing1/praxioj/milestone/2)은 향후 작업을 추적한다. 객체 생성은 구현 완료가 아니다. 이 Governance 단계에서 완료된 제품 기준선은 M5다.
+개발 순서는 **Milestone → Issue → Feature Branch → PR → Validation → Squash Merge**다. 실제 수용 조건과 전달 상태는 [M6-A](https://github.com/casing1/praxioj/milestone/1)에서 추적하며 객체 생성만으로 완료를 입증하지 않는다. [M6-B Linux 격리 검증](https://github.com/casing1/praxioj/milestone/2)은 실제 호스트 격리 검증까지 별도 Open 상태로 유지한다.
 
 > 개발 미리보기이며 localhost에서만 사용한다. 계정 세션과 역할 검사는 구현되어 있지만 운영 환경 보안 강화와 공개 배포 지원을 입증하지 않았다. 비밀정보나 민감한 개인정보를 입력하지 않는다.
 
@@ -112,7 +114,7 @@ python3 scripts/smoke-m5.py --restart-api
 docker compose up -d --wait api
 ```
 
-API의 고정 합성 테스트 Harness만 활성화한다. Mock은 Platform 자격증명 없이 제한된 요청만 받으며 호스트 프로세스·네트워크·파일 수집·참가자 Import를 사용하지 않는다. OS 격리의 증거는 아니다. 실제 격리 Runner는 별도로 검토할 M6 작업이다.
+API의 고정 합성 테스트 Harness만 활성화한다. Mock은 Platform 자격증명 없이 제한된 요청만 받으며 호스트 프로세스·네트워크·파일 수집·참가자 Import를 사용하지 않는다. OS 격리의 증거는 아니다. 실제 격리 Runner는 별도로 검토할 M6-B 작업이다. 독립 유지보수가 Judge 보존 정책을 적용하므로 TTL 경과만으로 즉시 삭제를 보장하지 않는다. 삭제한 증거는 정리 작업으로 복원할 수 없으며 요청 UUID는 해당 이력이 남아 있는 동안만 기억한다.
 
 ## 저장소 구조
 
@@ -141,7 +143,7 @@ make install
 make test
 ```
 
-Python 테스트는 격리 DB·로컬 HTTP Fixture를 사용한다. Frontend 테스트는 Mock HTTP 응답으로 요청·상호작용을 검증한다. 외부 Provider 테스트는 명시적으로 Opt-in하지 않으면 Skip한다. PostgreSQL 통합, 합성 백업·복구와 전체 Stack Smoke는 별도 검증이다. 영문 [M5](../../development/validation-m5.md), [M4](../../development/validation-m4.md), [M3](../../development/validation-m3.md), [공개 준비](../../development/preflight-validation.md), [M2](../../development/validation-m2.md), [M1](../../development/validation.md) 기록과 [버전 선택](../../development/versions.md)을 참고한다.
+Python 테스트는 격리 DB·로컬 HTTP Fixture를 사용한다. Frontend 테스트는 Mock HTTP 응답으로 요청·상호작용을 검증한다. 외부 Provider 테스트는 명시적으로 Opt-in하지 않으면 Skip한다. PostgreSQL 통합, 합성 백업·복구와 전체 Stack Smoke는 별도 검증이다. [M6-A 검증](development/validation-m6a.md), 과거 영문 [M5](../../development/validation-m5.md), [M4](../../development/validation-m4.md), [M3](../../development/validation-m3.md), [공개 준비](../../development/preflight-validation.md), [M2](../../development/validation-m2.md), [M1](../../development/validation.md) 기록과 [버전 선택](../../development/versions.md)을 참고한다.
 
 ## 설계와 후속 작업
 

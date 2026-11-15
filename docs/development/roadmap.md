@@ -1,5 +1,7 @@
 # Roadmap
 
+[한국어](../i18n/ko/development/roadmap.md)
+
 ## Completed foundation
 
 M1 provides the independent Problem SDK, Runtime/Mock contracts, trace/evaluation interfaces, PostgreSQL API and original sample. M2 adds compatible providers, bounded logical tools, persistent conversation/drafts, usage, cancellation and the Workspace UI. Their manifest digests and core regression scenarios remain supported.
@@ -14,10 +16,18 @@ M4 implements shared authentication/API throttles, session and password manageme
 
 M5 implements strict versioned execution contracts, an opt-in synthetic Execution Broker with separate persistent Job/Attempt state, opaque capability validation, lease/fencing/replay protection, bounded result/artifact validation and a synthetic evaluation bridge. Default backend selection remains unavailable. Administrator-owned fixed fixtures exercise the complete local HTTP path without enabling code execution or changing original grades. See [M5 validation](validation-m5.md), [execution protocol](../specifications/execution-protocol.md), and [Broker architecture](../architecture/execution-broker.md).
 
-## Milestone 6 prerequisites and recommendations
+## M6-A — lifecycle and remote Runner foundation
+
+[M6-A Milestone 1](https://github.com/casing1/praxioj/milestone/1) tracks issue-first governance, DB-acknowledged heartbeat/fencing, bounded terminal Judge retention/quota recovery, a strict synthetic Runner communication boundary and non-executing Linux preflight. [Governance PR #28](https://github.com/casing1/praxioj/pull/28) merged before feature work. Local implementation/validation is recorded in [M6-A validation](validation-m6a.md); protected feature delivery and final security/documentation acceptance remain in progress until the actual Issues and required checks are verified. Tracking-object creation is not completion.
+
+The Judge stays unavailable by default; explicit Mock retains administrator-owned fixed fixtures and synthetic provenance. The Runner channel is in-memory protocol testing, with no public endpoint, production peer authentication or hostile-code execution. Lifecycle and Runner share one authoritative renewal/cancellation contract and are delivered together; final milestone validation/documentation is a separate PR. New major stages use actual GitHub Milestones/Issues under the [engineering workflow](engineering-workflow.md).
+
+## M6-B and later prerequisites
+
+[M6-B — Isolated Linux Runner Validation](https://github.com/casing1/praxioj/milestone/2) and planning [Issues #23–#27](https://github.com/casing1/praxioj/issues/23) remain open. None of their OS-isolation acceptance is implemented or established by M6-A synthetic tests. The [Linux preflight](linux-runner-preflight.md) distinguishes measured host facts from unknown requirements.
 
 1. Prepare a dedicated disposable Linux execution host/VM and choose a supported kernel/KVM environment before implementing any hostile-code runner. Evaluate Firecracker first where KVM is available, with gVisor as an independently validated alternative. Record runtime/image provenance, privilege scope, resource overhead and language compatibility; fail closed on unsupported hosts. See the [isolation proposal](../architecture/sandbox-architecture.md).
-2. Implement the narrow remote broker capability/result channel and isolated synthetic harness only after review. Complete the pending host/network/filesystem/process/cleanup acceptance gates; M5 validates protocol metadata rather than OS confinement.
+2. Select and validate actual authenticated remote transport and identity provisioning before extending the M6-A in-memory channel to another host. Complete the pending host/network/filesystem/process/cleanup acceptance gates; versioned synthetic protocol tests do not establish OS confinement or operational network authentication.
 3. Conduct a deployment-focused security review before any public hosting: verified TLS/proxy trust, multi-node load/abuse tests, identity recovery/MFA, incident response and secret management. Existing bounded localhost controls are not production certification.
 4. Expand worker operations: separate deployment migrations, schedule independent maintenance, collect structured metrics centrally if scale warrants it, and exercise sustained load, DB failover and recovery. Preserve explicit uncertain provider outcomes instead of transparent retries.
 5. Mature data governance: encrypted off-host backups with tested key recovery, durable external erasure-ledger replication and reviewed restore promotion, backup lifecycle automation, audited author review UX and externally anchored evidence when justified. Current restore quarantine intentionally blocks promotion.

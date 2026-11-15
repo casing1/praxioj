@@ -98,7 +98,7 @@ def create_app(settings: Settings | None = None, *, database_url: str | None = N
     def health(db: Db):
         db.execute(text("SELECT 1"))
         revision = db.execute(text("SELECT version_num FROM alembic_version")).scalar_one_or_none()
-        if revision != "0008_judge_execution":
+        if revision != "0009_judge_lifecycle":
             raise HTTPException(503, "Database migrations are required")
         return HealthResponse()
 

@@ -11,6 +11,8 @@ from praxioj.execution import MOCK_FIXTURE_ID, MOCK_SUBMISSION_CONTENT, MockJudg
 from .judge import JudgeBroker, JudgeError, judge_public
 from .security import require_role
 
+DISPATCH_TIMEOUT_SECONDS = 30
+
 
 class SyntheticJudgeCreate(DomainModel):
     request_id: UUID
@@ -28,17 +30,55 @@ async def dispatch_mock(broker, backend, job_id):
     if lease is None:
         raise JudgeError("judge_not_claimable", 409)
     try:
-        raw = await asyncio.wait_for(backend.execute(lease.request), timeout=30)
+        raw = await _execute_with_heartbeat(broker, backend, lease)
     except asyncio.CancelledError:
-        await asyncio.to_thread(broker.fail, lease, "backend_error")
+        await asyncio.to_thread(broker.fail, lease, "worker_stopped")
         raise
     except TimeoutError:
-        await asyncio.to_thread(broker.fail, lease, "backend_error")
+        await asyncio.to_thread(broker.fail, lease, "backend_timeout")
         raise JudgeError("backend_error", 409) from None
+    except JudgeError:
+        await asyncio.to_thread(broker.fail, lease, "worker_stopped")
+        raise
     except Exception:
         await asyncio.to_thread(broker.fail, lease, "backend_error")
         raise JudgeError("backend_error", 409) from None
     return await asyncio.to_thread(broker.complete, lease, raw)
+
+
+async def _execute_with_heartbeat(broker, backend, lease):
+    """No transaction spans execution; stop and join renewal before terminalization."""
+    stop = asyncio.Event()
+
+    async def maintain_authority():
+        while not stop.is_set():
+            try:
+                await asyncio.wait_for(stop.wait(), timeout=broker.settings.judge_lease_seconds / 3)
+            except TimeoutError:
+                if not await asyncio.to_thread(broker.heartbeat, lease):
+                    raise JudgeError("execution_authority_lost", 409)
+
+    execution = asyncio.create_task(backend.execute(lease.request))
+    renewal = asyncio.create_task(maintain_authority())
+    try:
+        done, _ = await asyncio.wait((execution, renewal), timeout=DISPATCH_TIMEOUT_SECONDS,
+            return_when=asyncio.FIRST_COMPLETED)
+        if not done:
+            raise TimeoutError
+        if renewal in done:
+            await renewal
+            raise JudgeError("execution_authority_lost", 409)
+        raw = execution.result()
+    finally:
+        stop.set()
+        if not execution.done():
+            execution.cancel()
+        # Joining, rather than cancelling to_thread(), prevents a late DB renewal
+        # from racing completion. Database lock/statement waits are bounded.
+        outcomes = await asyncio.gather(execution, renewal, return_exceptions=True)
+    if isinstance(outcomes[1], BaseException):
+        raise JudgeError("execution_authority_lost", 409)
+    return raw
 
 
 def install_judge_routes(app):
