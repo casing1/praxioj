@@ -53,6 +53,7 @@ The Platform remains a localhost development preview. Protocol checks, Mock test
 
 ## Validation records
 
+- [Issue #23 Linux host/runtime preflight](development/validation-issue23.md)
 - [M6-A lifecycle and Runner validation](development/validation-m6a.md)
 - [M5 execution foundation](development/validation-m5.md)
 - [M4 operational controls](development/validation-m4.md)
@@ -61,7 +62,7 @@ The Platform remains a localhost development preview. Protocol checks, Mock test
 - [M2 AI Workspace](development/validation-m2.md)
 - [M1 initial foundation](development/validation.md)
 
-Each report describes its own revision, environment and verified scope. Historical counts are not current test results. M6-A's report distinguishes current local evidence from pending protected delivery and final acceptance.
+Each report describes its own revision, environment and verified scope. Historical counts are not current test results. Issue #23 distinguishes read-only observations and contract regressions from blocked Linux host acceptance; completed M6-A evidence does not pass M6-B isolation gates.
 
 ## Document templates
 

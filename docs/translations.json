@@ -16,5 +16,6 @@
   "docs/specifications/runner-protocol.md": "docs/i18n/ko/specifications/runner-protocol.md",
   "SECURITY.md": "docs/i18n/ko/SECURITY.md",
   "docs/development/validation-m6a.md": "docs/i18n/ko/development/validation-m6a.md",
-  "docs/development/roadmap.md": "docs/i18n/ko/development/roadmap.md"
+  "docs/development/roadmap.md": "docs/i18n/ko/development/roadmap.md",
+  "docs/development/validation-issue23.md": "docs/i18n/ko/development/validation-issue23.md"
 }

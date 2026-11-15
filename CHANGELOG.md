@@ -21,6 +21,7 @@ User-relevant changes follow [Keep a Changelog](https://keepachangelog.com/en/1.
 - Establish separate [M6-A](https://github.com/casing1/praxioj/milestone/1) and [M6-B](https://github.com/casing1/praxioj/milestone/2) planning objects without enabling an untrusted-code runner or treating planned work as implemented.
 - Record measured development-host facts, official Linux runtime prerequisites and the unverified M6-B isolation acceptance requirements.
 - Publish M6-A regression, security-review, optimization and protected-delivery evidence with synchronized English/Korean status; retain explicit M6-B non-goals.
+- Expand [Issue #23 Linux preflight](docs/development/linux-runner-preflight.md) with read-only macOS/Docker Desktop observations, pinned Firecracker/gVisor comparison, host acceptance/provenance requirements and future Runner integration gates. No dedicated Linux host is available; runtime selection remains Blocked and Issue #23/M6-B remain open. No execution backend is enabled.
 
 ## Historical milestone records
 
