@@ -23,7 +23,7 @@ M6-A Runtime 변경 전 유지관리자가 다음 결과를 확보했다.
 | Frontend | 33 passed; 3.67 s |
 | TypeScript/Vite | 통과; JS 274.37 kB / gzip 82.90 kB, CSS 31.23 kB / gzip 7.45 kB |
 | `pip check`, 포함 라이선스 동기화, Compose 설정 | 통과 |
-| 새 Governance 검사 도구 테스트 | 22 passed; 세부 동작은 PR에 기록 |
+| 새 Governance 검사 도구 테스트 | 25 passed; 세부 동작은 PR에 기록 |
 
 최초 SQLite 실행은 도구 제한 환경에서 로컬 Fixture Socket을 열지 못해 58.32 s에 341 passed, 21 skipped, 43 setup errors였다. 위의 허용된 로컬 재실행은 통과했다. 관찰 후 해결한 환경 제약이며 제품 실패를 숨긴 것이 아니다. SQLite Skip에는 PostgreSQL 전용 동시성 검사와 자격증명·실제 호출 또는 환경 의존 검사가 포함되며 정확한 목록은 실행 출력에 따른다. SQLite는 PostgreSQL Lock 검증이 아니다.
 

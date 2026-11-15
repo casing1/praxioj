@@ -63,6 +63,27 @@ def test_percent_encoded_paths_and_html_anchors(tmp_path):
     assert docs.check_document(tmp_path, source) == []
 
 
+def test_html_anchor_examples_in_code_do_not_satisfy_fragments(tmp_path):
+    target = write(tmp_path, "target.md", """# Title
+<a id="real"></a>
+```html
+<a id="ghost"></a>
+```
+`<a name="inline-ghost"></a>`
+""")
+    assert docs.anchors(target.read_text()) == {"title", "real"}
+    source = write(tmp_path, "README.md", "[real](target.md#real)\n[ghost](target.md#ghost)\n")
+    assert len(docs.check_document(tmp_path, source)) == 1
+
+
+@pytest.mark.parametrize("headings,expected", [
+    ("# Foo\n# Foo\n# Foo-1\n", {"foo", "foo-1", "foo-1-1"}),
+    ("# Foo\n# Foo-1\n# Foo\n", {"foo", "foo-1", "foo-2"}),
+])
+def test_generated_heading_suffixes_do_not_collide(headings, expected):
+    assert docs.anchors(headings) == expected
+
+
 def test_translation_pairs_require_reciprocal_language_links(tmp_path):
     write(tmp_path, "README.md", "[한국어](ko/README.md)\n")
     write(tmp_path, "ko/README.md", "[English](../README.md)\n")

@@ -23,7 +23,7 @@ REFERENCE = re.compile(r"^ {0,3}\[[^\]\n]+\]:\s*(<[^>\n]+>|\S+)", re.MULTILINE)
 
 
 def prose(text: str) -> str:
-    """Remove fenced code and inline code, retaining line positions for diagnostics."""
+    """Remove fenced code, retaining line positions and inline heading text."""
     result: list[str] = []
     fence: str | None = None
     for line in text.splitlines(keepends=True):
@@ -42,9 +42,12 @@ def prose(text: str) -> str:
 
 
 def anchors(text: str) -> set[str]:
-    used: dict[str, int] = {}
-    found = set(re.findall(r"<(?:a|\w+)\b[^>]*\b(?:id|name)=[\"']([^\"']+)[\"']", text))
-    lines = prose(text).splitlines()
+    rendered = prose(text)
+    used: set[str] = set()
+    # HTML-looking examples in fenced or inline code do not create rendered IDs.
+    html = re.sub(r"(`+).*?\1", "", rendered)
+    found = set(re.findall(r"<(?:a|\w+)\b[^>]*\b(?:id|name)=[\"']([^\"']+)[\"']", html))
+    lines = rendered.splitlines()
     for index, line in enumerate(lines):
         heading = re.match(r"^ {0,3}#{1,6}\s+(.+?)(?:\s+#+\s*)?$", line)
         value = heading[1] if heading else None
@@ -56,9 +59,12 @@ def anchors(text: str) -> set[str]:
         value = re.sub(r"<[^>]*>", "", value).replace("`", "").lower()
         value = "".join(c for c in value if c in " _-" or unicodedata.category(c)[0] in "LN")
         slug = value.replace(" ", "-")
-        occurrence = used.get(slug, 0)
-        used[slug] = occurrence + 1
-        found.add(slug if occurrence == 0 else f"{slug}-{occurrence}")
+        candidate, suffix = slug, 0
+        while candidate in used:
+            suffix += 1
+            candidate = f"{slug}-{suffix}"
+        used.add(candidate)
+        found.add(candidate)
     return found
 
 

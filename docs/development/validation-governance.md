@@ -23,7 +23,7 @@ The maintainer's validation run recorded the following before M6-A Runtime chang
 | Frontend | 33 passed; 3.67 s |
 | TypeScript/Vite | Passed; JS 274.37 kB / gzip 82.90 kB, CSS 31.23 kB / gzip 7.45 kB |
 | `pip check`, vendored license synchronization, Compose configuration | Passed |
-| New governance tooling tests | 22 passed; test-level behavior is recorded in the PR |
+| New governance tooling tests | 25 passed; test-level behavior is recorded in the PR |
 
 The first SQLite invocation in the restricted tool environment could not open local fixture sockets: 341 passed, 21 skipped and 43 setup errors in 58.32 s. The authorized local rerun above passed. This is an environment limitation observed and resolved for the run, not a suppressed product failure. SQLite skips include PostgreSQL-only concurrency and credentialed/live or environment-specific tests; exact collection output belongs to the associated run. SQLite does not validate PostgreSQL locking.
 
