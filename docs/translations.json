@@ -1,0 +1,14 @@
+{
+  "README.md": "docs/i18n/ko/README.md",
+  "CONTRIBUTING.md": "docs/i18n/ko/CONTRIBUTING.md",
+  "CHANGELOG.md": "docs/i18n/ko/CHANGELOG.md",
+  "docs/README.md": "docs/i18n/ko/index.md",
+  "docs/development/documentation-policy.md": "docs/i18n/ko/development/documentation-policy.md",
+  "docs/development/engineering-workflow.md": "docs/i18n/ko/development/engineering-workflow.md",
+  "docs/development/governance-reference.md": "docs/i18n/ko/development/governance-reference.md",
+  "docs/development/validation-governance.md": "docs/i18n/ko/development/validation-governance.md",
+  "docs/templates/design.md": "docs/i18n/ko/templates/design.md",
+  "docs/templates/specification.md": "docs/i18n/ko/templates/specification.md",
+  "docs/templates/validation.md": "docs/i18n/ko/templates/validation.md",
+  "docs/templates/security-review.md": "docs/i18n/ko/templates/security-review.md"
+}

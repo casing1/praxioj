@@ -5,34 +5,64 @@ labels: ["bug"]
 body:
   - type: markdown
     attributes:
-      value: "For sensitive security reports, see [SECURITY.md](../../SECURITY.md). Never include credentials or private submissions."
+      value: >-
+        Never include credentials, private submissions or participant data.
+        For sensitive reports, use https://github.com/casing1/praxioj/security/policy.
+        Maintainers apply actual area, priority, assignee and Milestone metadata after triage;
+        template text does not set those fields.
   - type: textarea
-    id: expected
+    id: summary
     attributes:
-      label: Expected behavior
-      description: What should have happened?
+      label: Summary
+      description: Describe the concrete problem and intended result.
     validations:
       required: true
   - type: textarea
-    id: actual
+    id: motivation
     attributes:
-      label: Actual behavior
-      description: What happened instead?
+      label: Motivation
+      description: Explain why this work is needed.
     validations:
       required: true
   - type: textarea
-    id: reproduction
+    id: scope
     attributes:
-      label: Minimal reproduction
-      description: Steps, sample data, and the relevant problem/provider configuration (redact all secrets).
+      label: Scope
+      description: Identify affected modules and proposed behavior. For a bug, include expected/actual behavior, version and minimal reproduction.
     validations:
       required: true
-  - type: input
-    id: version
-    attributes:
-      label: Version / commit
   - type: textarea
-    id: checks
+    id: non_goals
     attributes:
-      label: Tests and diagnostics
-      description: Include relevant test commands and sanitized error output.
+      label: Non-goals
+      description: State what this Issue deliberately does not cover.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+      description: Use observable, testable conditions; do not assume unfinished dependencies are complete.
+    validations:
+      required: true
+  - type: textarea
+    id: security
+    attributes:
+      label: Security & Compatibility
+      description: Describe authority, data, Framework/Platform contracts, runtime and migration effects, or explain why none apply.
+    validations:
+      required: true
+  - type: textarea
+    id: validation
+    attributes:
+      label: Validation
+      description: List positive, negative, regression, boundary and relevant PostgreSQL/concurrency checks. Redact secrets.
+    validations:
+      required: true
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencies
+      description: Link prerequisite Issues/Milestones, or state that none apply.
+    validations:
+      required: true

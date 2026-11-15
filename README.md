@@ -1,5 +1,7 @@
 # PraxiOJ
 
+[English](README.md) · [한국어](docs/i18n/ko/README.md) · [Documentation](docs/README.md) · [Changelog](CHANGELOG.md)
+
 **AI-Assisted Online Judge Framework**  
 *An open-source framework for evaluating human–AI collaboration.*
 
@@ -12,6 +14,8 @@ The **Framework** is an independently installable Python library for problem man
 Milestone 5 adds a versioned execution protocol, a separate persistent Execution Broker, single-attempt capabilities, strict result/artifact validation and a deterministic Mock Judge. The Judge defaults to unavailable. An explicit local test setting enables only administrator-owned fixed synthetic fixtures; no participant code or external evaluator runs. Accepted synthetic assessments remain separate from existing Evaluation scores and always identify their Mock provenance.
 
 M4 account/session controls, shared quotas, worker operations, maintenance, data export/deletion and verified quarantined PostgreSQL restore remain supported. The AI Workspace retains Mock and server-configured OpenAI-compatible providers, bounded logical file tools, Trace integrity/retention and three sample problems. No credentials are needed for normal tests.
+
+Development follows **Milestone → Issue → Feature Branch → PR → Validation → Squash Merge**. The [M6-A lifecycle and remote-runner foundation](https://github.com/casing1/praxioj/milestone/1) and separate [M6-B isolated Linux validation](https://github.com/casing1/praxioj/milestone/2) track upcoming work; their creation does not mark implementation complete. M5 remains the completed product baseline at this governance stage.
 
 > Development preview only. Keep it on localhost. Account sessions and role checks are implemented, but production hardening and public deployment support are not established. Do not enter secrets or sensitive personal data.
 
@@ -146,6 +150,7 @@ Python tests use isolated databases and local HTTP fixtures; frontend tests exer
 - [Runtime and tools](docs/specifications/runtime-and-tools.md), [security boundaries](SECURITY.md), and [roadmap](docs/development/roadmap.md)
 - [Authentication](docs/development/authentication.md), [worker operations](docs/architecture/persistent-jobs.md), [data governance](docs/development/data-governance.md), and [future sandbox architecture](docs/architecture/sandbox-architecture.md)
 - [Contributing](CONTRIBUTING.md)
-- [Engineering workflow](docs/development/engineering-workflow.md): PR writing, per-change README review, and mandatory optimization/hardening gates
+- [Documentation index](docs/README.md), [documentation and translation policy](docs/development/documentation-policy.md), and [changelog](CHANGELOG.md)
+- [Engineering workflow](docs/development/engineering-workflow.md): Issue-first tracking, actual PR metadata, README/CHANGELOG review, English/Korean consistency, and mandatory optimization/hardening gates
 
 Copyright 2026 DoHyun Choi. PraxiOJ's original code is licensed under the **Apache License, Version 2.0** (SPDX: `Apache-2.0`); see [LICENSE](LICENSE) and [NOTICE](NOTICE). Contributors retain copyright in their own contributions. Third-party components retain their original licenses and notices; see [third-party web notices](THIRD_PARTY_NOTICES.txt) and the [licensing and distribution notes](docs/development/licensing.md). External contributions are welcome under the process in [CONTRIBUTING.md](CONTRIBUTING.md).
