@@ -59,6 +59,7 @@ Platform은 localhost 개발 미리보기다. 프로토콜 검사, Mock 테스�
 
 ## 검증 기록
 
+- [Issue #23 Linux 호스트·Runtime 사전 점검](development/validation-issue23.md)
 - [M6-A 수명주기·Runner 검증](development/validation-m6a.md)
 
 다음 과거 검증 보고서는 영문이다.
@@ -70,7 +71,7 @@ Platform은 localhost 개발 미리보기다. 프로토콜 검사, Mock 테스�
 - [M2 AI Workspace](../../development/validation-m2.md)
 - [M1 초기 기반](../../development/validation.md)
 
-각 보고서의 결과는 해당 리비전·환경·검증 범위에 한정된다. 과거 통과 수를 현재 테스트 결과로 취급하지 않는다. M6-A 보고서는 현재 로컬 검증과 진행 중인 보호된 전달·최종 수용 단계를 구분한다.
+각 보고서의 결과는 해당 리비전·환경·검증 범위에 한정된다. 과거 통과 수를 현재 테스트 결과로 취급하지 않는다. Issue #23은 읽기 전용 관측·계약 회귀와 Blocked 상태의 Linux 호스트 수용 검증을 구분한다. 완료한 M6-A 증거는 M6-B 격리 Gate를 통과시키지 않는다.
 
 ## 문서 템플릿
 
